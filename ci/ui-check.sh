@@ -9,12 +9,30 @@ mkdir -p "$OUT"
 shot() { sleep 1; adb exec-out screencap -p > "$OUT/$1.png"; echo "shot $1"; }
 
 # tap.py finds a node by exact text, text prefix, or content-desc and taps its centre
+# uiautomator dump fails now and then while the screen settles, so retry a few times
+dump() {
+  for _ in 1 2 3 4 5; do
+    adb shell rm -f /sdcard/ui.xml
+    adb shell uiautomator dump /sdcard/ui.xml > /tmp/dump.log 2>&1
+    adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null 2>&1 && return 0
+    sleep 2
+  done
+  echo "dump failed: $(cat /tmp/dump.log)"
+  return 1
+}
+
 tap() {
-  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1
-  adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null 2>&1
-  xy=$(python3 ci/find_node.py /tmp/ui.xml "$@") || { echo "not found: $*"; return 1; }
-  adb shell input tap $xy
-  echo "tapped $* at $xy"
+  for _ in 1 2 3; do
+    dump || continue
+    if xy=$(python3 ci/find_node.py /tmp/ui.xml "$@"); then
+      adb shell input tap $xy
+      echo "tapped $* at $xy"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "not found: $*"
+  return 1
 }
 
 adb install -r "$APK"
@@ -26,7 +44,7 @@ shot 01-home
 tap text "Search"; sleep 3
 shot 02-search-home
 
-tap text "What do you want to listen to?"; sleep 1
+tap class "android.widget.EditText"; sleep 1
 adb shell input text "arijit%ssingh"; adb shell input keyevent 66
 sleep 14
 shot 03-search-all
@@ -39,26 +57,27 @@ tap text "Arijit Singh"; sleep 18
 shot 06-artist
 adb shell input swipe 540 1800 540 600 400; sleep 2
 shot 07-artist-scrolled
-adb shell input keyevent 4; sleep 2
+tap desc "Back"; sleep 2
 
 tap text "Albums"; sleep 10
 shot 08-search-albums
-tap prefix "Album •"; sleep 15
+tap contains "Album •"; sleep 15
 shot 09-album
-tap text "1"; sleep 12
+tap desc "Play"; sleep 12
 shot 10-after-play
 
 tap desc "Like" || tap desc "Unlike"
 sleep 1
 # the mini player row: tap its left part to open Now Playing
-adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1; adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null 2>&1
+dump
 y=$(python3 ci/find_node.py /tmp/ui.xml desc "Unlike" | cut -d' ' -f2) || y=""
 [ -n "$y" ] && adb shell input tap 200 "$y"
 sleep 5
 shot 11-now-playing
 adb shell input swipe 540 1900 540 600 400; sleep 4
 shot 12-now-playing-lyrics
-adb shell input keyevent 4; sleep 2
+adb shell input swipe 540 600 540 1900 300; sleep 2
+tap desc "Close"; sleep 2
 
 tap text "Your Library"; sleep 3
 shot 13-library
@@ -66,7 +85,6 @@ tap desc "Create playlist"; sleep 2
 adb shell input text "Road%strip"; sleep 1
 tap text "Save"; sleep 3
 shot 14-new-playlist
-adb shell input keyevent 4; sleep 2
 
 tap text "Home"; sleep 3
 shot 15-home-after
