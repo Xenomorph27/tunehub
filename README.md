@@ -1,78 +1,93 @@
+<div align="center">
+
+<img src="docs/icon.png" width="96" alt="TuneHub icon">
+
 # TuneHub
 
-A personal, ad-free music player for Android. Search YouTube Music, tap a song, and it plays
-in the background with the screen off. No YouTube page, no video, no ads.
+**Ad-free music for Android, from YouTube Music.**
+Search anything, tap play, lock your phone. No ads, no account, no subscription.
 
-## How it works
+[![Download APK](https://img.shields.io/github/v/release/Xenomorph27/tunehub?label=download&logo=android&color=7B4DFF)](https://github.com/Xenomorph27/tunehub/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/Xenomorph27/tunehub/build.yml?branch=main&label=build)](https://github.com/Xenomorph27/tunehub/actions/workflows/build.yml)
+![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-6FF3FF?logo=android)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FF3FB4)](LICENSE)
 
-There is no hidden browser. The app talks to YouTube Music's own API through
-[NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor), gets the direct audio
-stream for a song, and plays just that audio in ExoPlayer inside a background media service.
-Because YouTube's player never loads, there is nothing to show ads in.
+<img src="docs/screenshots/home.png" width="23%" alt="Home">&nbsp;
+<img src="docs/screenshots/search.png" width="23%" alt="Search">&nbsp;
+<img src="docs/screenshots/artist.png" width="23%" alt="Artist page">&nbsp;
+<img src="docs/screenshots/now-playing.png" width="23%" alt="Now playing">
 
-```
-TuneHub UI (Compose) ──► MediaController ──► PlaybackService (ExoPlayer + MediaSession)
-        │                                          │
-        └── search / suggestions ──► NewPipeExtractor ◄── stream URL lookup at load time
-```
-
-## Features
-
-- **Search** YouTube Music with filters: All, Songs, Artists, Albums, Playlists, Videos.
-  "All" shows a top result plus a few of each. Suggestions while typing, recent searches,
-  genre tiles to browse.
-- **Artist pages**: banner, popular songs, discography, music videos, Follow.
-- **Album and playlist pages**: save to your library, play, shuffle, download all.
-- **Your Library**: Liked Songs, Downloads, your playlists (collage covers), saved albums and
-  playlists, followed artists, with filter chips and A–Z / recent sorting.
-- **Aurora Glass design**: deep-space background whose glow follows the album art,
-  frosted-glass cards, floating pill navigation.
-- **Now Playing**: round cover inside a live progress ring, waveform seek bar, swipe the
-  cover to skip, time-synced lyrics (from LRCLIB), sleep timer, share, queue (reorder,
-  remove, clear), and a badge showing the stream quality.
-- **Song menu** (⋮ or long-press anywhere): like, add to playlist, play next, add to queue,
-  song radio, download, go to artist, share.
-- **Background playback** with notification, lock-screen and headphone controls.
-- **Autoplay radio**: when the queue runs out it keeps going with related songs.
-- **Offline downloads**, a 512 MB streaming cache, data-saver quality, equalizer shortcut.
-- **Best available audio**: the highest-bitrate original stream YouTube offers without
-  Premium (usually Opus ~160 kbps), skipping the compressed "DRC" copies.
-- **Share** any YouTube / YouTube Music link to TuneHub to play it.
-
-Everything you save stays on your phone.
+</div>
 
 ## Install
 
-Every push to `main` builds a signed APK with GitHub Actions and attaches it to the
-**latest** release.
+1. On your Android phone, open **[Releases → latest](https://github.com/Xenomorph27/tunehub/releases/latest)**.
+2. Under **Assets**, tap **`tunehub.apk`** to download it.
+3. Open the file. If Android asks, allow installing apps from your browser, then tap **Install**.
+   Play Protect may warn because the app isn't from the Play Store: tap **More details → Install anyway**.
 
-1. On your phone, open this repo's **Releases → latest**.
-2. Download `tunehub.apk` and open it. Allow "install unknown apps" for your browser when asked.
-3. New builds install over the old one and keep your library, because every build is signed
-   with the same key (stored in the repo's Actions secrets).
+New versions install right over the old one and keep your library.
 
-## Build locally (optional)
+## What it does
 
-Open the folder in Android Studio (it sets up the SDK and Gradle wrapper), or with the
-Android SDK and Gradle 8.11 installed:
+- **Search with filters**: All, Songs, Artists, Albums, Playlists, Videos. "All" gives a top
+  result plus a few of each, with suggestions as you type, recent searches and genre tiles.
+- **Artist pages** with popular songs, discography and music videos. Follow your favourites.
+- **Albums and playlists**: save them, play, shuffle or download the whole thing.
+- **Your library**: Liked Songs, Downloads, your own playlists, saved albums and followed
+  artists, with filters and sorting. Everything stays on your phone.
+- **Now Playing**: round cover inside a live progress ring, waveform seek bar, swipe the
+  cover to skip, time-synced lyrics, sleep timer, queue editing and a stream-quality badge.
+- **Background playback** with lock-screen, notification and headphone controls.
+- **Radio and autoplay**: start a radio from any song; when your queue ends it keeps going
+  with related music. Home builds radio mixes from the artists you play.
+- **Offline downloads**, a 512 MB streaming cache, a data-saver mode and an equalizer shortcut.
+- **Share to TuneHub**: share any YouTube or YouTube Music link to the app to play it.
+
+## How it works
+
+TuneHub never loads YouTube's player, which is where the ads live. It asks YouTube Music for
+search results and the song's audio stream directly, using
+[NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor), and plays that audio
+in ExoPlayer inside a background media service.
+
+```
+TuneHub UI (Jetpack Compose) ──► MediaController ──► PlaybackService (ExoPlayer + MediaSession)
+        │                                                   │
+        └── search, artists, albums ──► NewPipeExtractor ◄──┘ audio stream lookup at play time
+```
+
+Audio is the best stream YouTube serves without Premium, usually Opus at about 160 kbps.
+TuneHub skips YouTube's dynamic-range-compressed copies of the same audio. Lyrics come from
+[LRCLIB](https://lrclib.net).
+
+## Known limits
+
+- **YouTube changes things.** Every few weeks something on YouTube's side shifts and playback
+  can break until NewPipeExtractor ships a fix. Updating the extractor version in
+  `app/build.gradle.kts` and pushing is usually all it takes.
+- **No account features.** There's no sign-in, so no YouTube Music history or Premium
+  256 kbps audio.
+- **Not on the Play Store**, and it won't be.
+
+## Build it yourself
+
+Open the project in Android Studio, or with the Android SDK and Gradle 8.11:
 
 ```bash
 gradle assembleRelease
 ```
 
-`gradle testReleaseUnitTest` runs live smoke tests: search, artist and album pages, lyrics,
-and a stream fetch (which YouTube blocks from CI servers, so CI only warns on it).
+- Every push to `main` builds a signed APK in GitHub Actions and publishes it as the
+  **latest** release.
+- `gradle testReleaseUnitTest` runs live smoke tests against YouTube Music and LRCLIB.
+- The **UI check** workflow (Actions tab → Run workflow) boots an emulator, clicks through
+  the main screens and uploads screenshots.
 
-The **UI check** workflow (Actions tab → Run workflow) boots an emulator, clicks through
-search, an artist, an album, playback, the library and settings, and uploads screenshots.
+## License and disclaimer
 
-## When it stops working
+TuneHub is free software under the [GNU GPL v3](LICENSE), the same license as
+NewPipeExtractor, which it builds on.
 
-YouTube changes its internals every few weeks and extraction breaks for a while. The fix is
-usually to bump the NewPipeExtractor version in `app/build.gradle.kts` to the
-[latest release](https://github.com/TeamNewPipe/NewPipeExtractor/releases) and push.
-
-## Note
-
-For personal use only. This uses YouTube in a way its Terms of Service don't allow, so it's
-not meant for publishing or distribution.
+It's a personal project, not affiliated with YouTube or Google. Using it may go against
+YouTube's Terms of Service, so use it at your own discretion.
