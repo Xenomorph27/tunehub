@@ -44,6 +44,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -51,6 +52,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -235,6 +237,8 @@ fun NowPlayingScreen(onClose: () -> Unit) {
         { nav.open(Route.Artist(ArtistRef(url, song.artist))) }
     }
 
+    // this overlay sits outside the Scaffold, so set the content color it would have provided
+    CompositionLocalProvider(LocalContentColor provides Color.White) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -345,6 +349,8 @@ fun NowPlayingScreen(onClose: () -> Unit) {
             val found = lyrics as? LyricsState.Found
             if (found != null) FullLyrics(found.result, position, tint) { showLyrics = false }
         }
+    }
+
     }
 
     if (showQueue) QueueSheet { showQueue = false }

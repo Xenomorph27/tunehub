@@ -18,12 +18,23 @@ Spitify UI (Compose) ──► MediaController ──► PlaybackService (ExoPla
 
 ## Features
 
-- YouTube Music search (songs or videos), with suggestions and endless scrolling
-- Background playback, with controls in the notification, on the lock screen and from headphones
-- Autoplay radio: when the queue runs out it keeps going with related songs (toggle in Library)
-- Liked songs, playlists, recently played and quick picks (stored only on the phone)
-- Queue: play next, add to queue, jump to any song, remove
-- Share any YouTube / YouTube Music link to Spitify to play it
+- **Search** YouTube Music with filters: All, Songs, Artists, Albums, Playlists, Videos.
+  "All" shows a top result plus a few of each. Suggestions while typing, recent searches,
+  genre tiles to browse.
+- **Artist pages**: banner, popular songs, discography, music videos, Follow.
+- **Album and playlist pages**: save to your library, play, shuffle, download all.
+- **Your Library**: Liked Songs, Downloads, your playlists (collage covers), saved albums and
+  playlists, followed artists, with filter chips and A–Z / recent sorting.
+- **Now Playing**: colors pulled from the artwork, swipe the cover to skip, time-synced
+  lyrics (from LRCLIB), sleep timer, share, queue (reorder, remove, clear).
+- **Song menu** (⋮ or long-press anywhere): like, add to playlist, play next, add to queue,
+  song radio, download, go to artist, share.
+- **Background playback** with notification, lock-screen and headphone controls.
+- **Autoplay radio**: when the queue runs out it keeps going with related songs.
+- **Offline downloads**, a 512 MB streaming cache, data-saver quality, equalizer shortcut.
+- **Share** any YouTube / YouTube Music link to Spitify to play it.
+
+Everything you save stays on your phone.
 
 ## Install
 
@@ -44,8 +55,11 @@ Android SDK and Gradle 8.11 installed:
 gradle assembleRelease
 ```
 
-`gradle testReleaseUnitTest` runs a live smoke test: search, resolve a stream and fetch its
-first bytes.
+`gradle testReleaseUnitTest` runs live smoke tests: search, artist and album pages, lyrics,
+and a stream fetch (which YouTube blocks from CI servers, so CI only warns on it).
+
+The **UI check** workflow (Actions tab → Run workflow) boots an emulator, clicks through
+search, an artist, an album, playback, the library and settings, and uploads screenshots.
 
 ## When it stops working
 
