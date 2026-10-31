@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Spitify"
+rootProject.name = "TuneHub"
 include(":app")

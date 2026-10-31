@@ -14,3 +14,6 @@ signing/
 
 # scratch reference sources
 .ref/
+
+# design mockups
+.design/

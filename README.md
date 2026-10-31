@@ -1,4 +1,4 @@
-# Spitify
+# TuneHub
 
 A personal, ad-free music player for Android. Search YouTube Music, tap a song, and it plays
 in the background with the screen off. No YouTube page, no video, no ads.
@@ -11,7 +11,7 @@ stream for a song, and plays just that audio in ExoPlayer inside a background me
 Because YouTube's player never loads, there is nothing to show ads in.
 
 ```
-Spitify UI (Compose) ──► MediaController ──► PlaybackService (ExoPlayer + MediaSession)
+TuneHub UI (Compose) ──► MediaController ──► PlaybackService (ExoPlayer + MediaSession)
         │                                          │
         └── search / suggestions ──► NewPipeExtractor ◄── stream URL lookup at load time
 ```
@@ -25,14 +25,19 @@ Spitify UI (Compose) ──► MediaController ──► PlaybackService (ExoPla
 - **Album and playlist pages**: save to your library, play, shuffle, download all.
 - **Your Library**: Liked Songs, Downloads, your playlists (collage covers), saved albums and
   playlists, followed artists, with filter chips and A–Z / recent sorting.
-- **Now Playing**: colors pulled from the artwork, swipe the cover to skip, time-synced
-  lyrics (from LRCLIB), sleep timer, share, queue (reorder, remove, clear).
+- **Aurora Glass design**: deep-space background whose glow follows the album art,
+  frosted-glass cards, floating pill navigation.
+- **Now Playing**: round cover inside a live progress ring, waveform seek bar, swipe the
+  cover to skip, time-synced lyrics (from LRCLIB), sleep timer, share, queue (reorder,
+  remove, clear), and a badge showing the stream quality.
 - **Song menu** (⋮ or long-press anywhere): like, add to playlist, play next, add to queue,
   song radio, download, go to artist, share.
 - **Background playback** with notification, lock-screen and headphone controls.
 - **Autoplay radio**: when the queue runs out it keeps going with related songs.
 - **Offline downloads**, a 512 MB streaming cache, data-saver quality, equalizer shortcut.
-- **Share** any YouTube / YouTube Music link to Spitify to play it.
+- **Best available audio**: the highest-bitrate original stream YouTube offers without
+  Premium (usually Opus ~160 kbps), skipping the compressed "DRC" copies.
+- **Share** any YouTube / YouTube Music link to TuneHub to play it.
 
 Everything you save stays on your phone.
 
@@ -41,8 +46,8 @@ Everything you save stays on your phone.
 Every push to `main` builds a signed APK with GitHub Actions and attaches it to the
 **latest** release.
 
-1. On your phone, open this repo's **Releases → latest** (signed in to GitHub, since the repo is private).
-2. Download `spitify.apk` and open it. Allow "install unknown apps" for your browser when asked.
+1. On your phone, open this repo's **Releases → latest**.
+2. Download `tunehub.apk` and open it. Allow "install unknown apps" for your browser when asked.
 3. New builds install over the old one and keep your library, because every build is signed
    with the same key (stored in the repo's Actions secrets).
 

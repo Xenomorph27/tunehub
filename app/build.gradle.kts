@@ -9,13 +9,14 @@ plugins {
 
 // CI passes the run number so every build installs as an update over the previous one
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-val keystorePath: String? = System.getenv("SPITIFY_KEYSTORE")
+val keystorePath: String? = System.getenv("TUNEHUB_KEYSTORE")
 
 android {
-    namespace = "com.spitify.app"
+    namespace = "com.tunehub.app"
     compileSdk = 35
 
     defaultConfig {
+        // unchanged from the app's first name so existing installs update in place and keep their library
         applicationId = "com.spitify.app"
         minSdk = 26
         targetSdk = 35
@@ -27,17 +28,19 @@ android {
         if (keystorePath != null) {
             create("release") {
                 storeFile = file(keystorePath)
-                storePassword = System.getenv("SPITIFY_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("SPITIFY_KEY_ALIAS")
-                keyPassword = System.getenv("SPITIFY_KEY_PASSWORD")
+                storePassword = System.getenv("TUNEHUB_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("TUNEHUB_KEY_ALIAS")
+                keyPassword = System.getenv("TUNEHUB_KEY_PASSWORD")
             }
         }
     }
 
     buildTypes {
         release {
-            // R8 would need keep rules for the extractor's Rhino/jsoup internals; not worth it here
-            isMinifyEnabled = false
+            // R8 makes Compose noticeably smoother; proguard-rules.pro keeps the extractor's reflection working
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (keystorePath != null) {
                 signingConfigs.getByName("release")
             } else {
@@ -107,6 +110,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-datasource:1.5.1")
     implementation("androidx.media3:media3-database:1.5.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
+    // installs the Compose libraries' bundled startup profiles on sideloaded installs
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     implementation("io.coil-kt:coil-compose:2.7.0")

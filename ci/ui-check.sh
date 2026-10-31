@@ -47,11 +47,11 @@ sleep 60
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null
 adb install -r "$APK"
 adb logcat -c
-adb shell am start -n com.spitify.app/.ui.MainActivity
+adb shell am start -n com.spitify.app/com.tunehub.app.ui.MainActivity
 sleep 10
 shot 01-home
 
-tap text "Search"; sleep 3
+tap desc "Search"; sleep 3
 shot 02-search-home
 
 tap class "android.widget.EditText"; sleep 1
@@ -78,14 +78,13 @@ shot 09-album
 tap desc "Play"; sleep 12
 shot 10-after-play
 
-# tap the mini player's left side (found via its like button) to open Now Playing
+# the mini player floats just above the nav pill: tap it relative to the Home tab
 y=""
 for _ in 1 2 3; do
-  dump && y=$(python3 ci/find_node.py /tmp/ui.xml desc "Like" || python3 ci/find_node.py /tmp/ui.xml desc "Unlike") && break
+  dump && y=$(python3 ci/find_node.py /tmp/ui.xml desc "Home" | cut -d' ' -f2) && break
   sleep 2
 done
-y=$(echo "$y" | cut -d' ' -f2)
-[ -n "$y" ] && adb shell input tap 200 "$y" && echo "opened now playing"
+[ -n "$y" ] && adb shell input tap 300 $((y - 200)) && echo "opened now playing"
 sleep 5
 shot 11-now-playing
 adb shell input swipe 540 1900 540 600 400; sleep 4
@@ -93,7 +92,7 @@ shot 12-now-playing-lyrics
 adb shell input swipe 540 600 540 1900 300; sleep 2
 tap desc "Close"; sleep 2
 
-tap text "Your Library"; sleep 3
+tap desc "Library"; sleep 3
 shot 13-library
 tap desc "Create playlist"; sleep 2
 adb shell input text "Road%strip"; sleep 1
@@ -101,7 +100,7 @@ adb shell dumpsys input_method | grep -q "mInputShown=true" && adb shell input k
 tap text "Save"; sleep 3
 shot 14-new-playlist
 
-tap text "Home"; sleep 3
+tap desc "Home"; sleep 3
 shot 15-home-after
 tap desc "Settings"; sleep 3
 shot 16-settings

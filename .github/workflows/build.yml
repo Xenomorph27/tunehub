@@ -32,17 +32,17 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/spitify.jks"
-            echo "SPITIFY_KEYSTORE=$RUNNER_TEMP/spitify.jks" >> "$GITHUB_ENV"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tunehub.jks"
+            echo "TUNEHUB_KEYSTORE=$RUNNER_TEMP/tunehub.jks" >> "$GITHUB_ENV"
           else
             echo "::warning::No KEYSTORE_BASE64 secret; APK is signed with a throwaway debug key"
           fi
 
       - name: Build release APK
         env:
-          SPITIFY_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          SPITIFY_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          SPITIFY_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          TUNEHUB_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          TUNEHUB_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          TUNEHUB_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease --stacktrace
 
       # Talks to the real YouTube; datacenter IPs get blocked sometimes, so don't fail the build
@@ -52,16 +52,16 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: spitify-apk
+          name: tunehub-apk
           path: app/build/outputs/apk/release/*.apk
 
       - name: Publish to the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk spitify.apk
+          cp app/build/outputs/apk/release/app-release.apk tunehub.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest spitify.apk \
-            --title "Spitify build ${{ github.run_number }}" \
-            --notes "Built from ${{ github.sha }}. Download spitify.apk on your phone and install it." \
+          gh release create latest tunehub.apk \
+            --title "TuneHub build ${{ github.run_number }}" \
+            --notes "Built from ${{ github.sha }}. Download tunehub.apk on your phone and install it." \
             --target "${{ github.sha }}"
