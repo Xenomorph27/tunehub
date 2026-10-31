@@ -25,6 +25,14 @@ object StreamResolver {
 
     private val cache = ConcurrentHashMap<String, Resolved>()
 
+    /** Picks the lowest-bitrate stream instead of the highest. Set from the app's settings. */
+    @Volatile
+    var dataSaver = false
+        set(value) {
+            if (field != value) cache.clear()
+            field = value
+        }
+
     /** Blocking network call. */
     fun resolve(videoId: String): Resolved {
         cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let { return it }
@@ -37,12 +45,12 @@ object StreamResolver {
         val candidates = progressive
             .filter { it.audioTrackType == null || it.audioTrackType == AudioTrackType.ORIGINAL }
             .ifEmpty { progressive }
-        val best = candidates.maxWithOrNull(
-            compareBy<AudioStream>(
-                { maxOf(it.averageBitrate, it.bitrate) },
-                { if (it.format == MediaFormat.M4A) 1 else 0 },
-            )
-        ) ?: throw IOException("No playable audio stream for $videoId")
+        val byQuality = compareBy<AudioStream>(
+            { maxOf(it.averageBitrate, it.bitrate) },
+            { if (it.format == MediaFormat.M4A) 1 else 0 },
+        )
+        val best = (if (dataSaver) candidates.minWithOrNull(byQuality) else candidates.maxWithOrNull(byQuality))
+            ?: throw IOException("No playable audio stream for $videoId")
 
         val url = best.content
         val resolved = Resolved(

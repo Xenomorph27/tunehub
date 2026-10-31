@@ -25,15 +25,15 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
             if (song == null) {
                 Toast.makeText(this@MainActivity, "Couldn't open that link", Toast.LENGTH_SHORT).show()
             } else {
-                PlayerConnection.play(listOf(song))
+                PlayerConnection.startRadio(song)
             }
         }
     }
@@ -89,15 +89,14 @@ private data class Tab(val label: String, val icon: ImageVector)
 private val tabs = listOf(
     Tab("Home", Icons.Default.Home),
     Tab("Search", Icons.Default.Search),
-    Tab("Library", AppIcons.Library),
+    Tab("Your Library", AppIcons.Library),
 )
 
 @Composable
 private fun AppRoot() {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    val stack = remember { mutableStateListOf<Route>() }
-    var nowPlaying by rememberSaveable { mutableStateOf(false) }
-    val searchVm: SearchViewModel = viewModel()
+    val nav = remember { Navigator() }
+    var menu by remember { mutableStateOf<SongMenuRequest?>(null) }
+    val searchVm: SearchViewModel = viewModel(key = "search")
     val homeVm: HomeViewModel = viewModel()
     val context = LocalContext.current
 
@@ -108,57 +107,62 @@ private fun AppRoot() {
         }
     }
 
-    BackHandler(enabled = nowPlaying || stack.isNotEmpty() || tab != 0) {
-        when {
-            nowPlaying -> nowPlaying = false
-            stack.isNotEmpty() -> stack.removeAt(stack.lastIndex)
-            else -> tab = 0
-        }
-    }
+    BackHandler(enabled = nav.canGoBack) { nav.back() }
 
-    Box(Modifier.fillMaxSize()) {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            bottomBar = {
-                Column {
-                    MiniPlayer(onOpen = { nowPlaying = true })
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                        tabs.forEachIndexed { i, t ->
-                            NavigationBarItem(
-                                selected = tab == i,
-                                onClick = {
-                                    tab = i
-                                    stack.clear()
-                                },
-                                icon = { Icon(t.icon, null) },
-                                label = { Text(t.label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                ),
-                            )
+    CompositionLocalProvider(LocalNav provides nav, LocalSongMenu provides { menu = it }) {
+        Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                bottomBar = {
+                    Column {
+                        MiniPlayer(onOpen = { nav.nowPlayingOpen = true })
+                        NavigationBar(containerColor = Color.Black.copy(alpha = 0.92f)) {
+                            tabs.forEachIndexed { i, t ->
+                                NavigationBarItem(
+                                    selected = nav.tab == i,
+                                    onClick = { nav.selectTab(i) },
+                                    icon = { Icon(t.icon, null) },
+                                    label = { Text(t.label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = Color.Transparent,
+                                        selectedIconColor = Color.White,
+                                        selectedTextColor = Color.White,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ),
+                                )
+                            }
                         }
                     }
-                }
-            },
-        ) { padding ->
-            Box(Modifier.padding(padding)) {
-                when (val route = stack.lastOrNull()) {
-                    null -> when (tab) {
-                        0 -> HomeScreen(homeVm)
-                        1 -> SearchScreen(searchVm)
-                        else -> LibraryScreen(open = { stack.add(it) })
+                },
+            ) { padding ->
+                Box(Modifier.padding(padding)) {
+                    when (val route = nav.current) {
+                        null -> when (nav.tab) {
+                            0 -> HomeScreen(homeVm)
+                            1 -> SearchScreen(searchVm)
+                            else -> LibraryScreen()
+                        }
+                        Route.Liked -> LikedScreen(onBack = nav::back)
+                        Route.Downloads -> DownloadsScreen(onBack = nav::back)
+                        Route.Settings -> SettingsScreen(onBack = nav::back)
+                        is Route.LocalPlaylist -> LocalPlaylistScreen(route.id, onBack = nav::back)
+                        is Route.Album -> AlbumScreen(route.album, onBack = nav::back)
+                        is Route.Artist -> ArtistScreen(route.artist, onBack = nav::back)
+                        is Route.Genre -> GenreScreen(route.name, onBack = nav::back)
                     }
-                    else -> CollectionScreen(route, onBack = { stack.remove(route) })
                 }
+            }
+
+            AnimatedVisibility(
+                visible = nav.nowPlayingOpen && PlayerConnection.current != null,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it },
+            ) {
+                NowPlayingScreen(onClose = { nav.nowPlayingOpen = false })
             }
         }
 
-        AnimatedVisibility(
-            visible = nowPlaying && PlayerConnection.current != null,
-            enter = slideInVertically { it },
-            exit = slideOutVertically { it },
-        ) {
-            NowPlayingScreen(onClose = { nowPlaying = false })
-        }
+        menu?.let { request -> SongActionsSheet(request) { menu = null } }
     }
 }

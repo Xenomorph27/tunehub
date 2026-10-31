@@ -14,7 +14,13 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.spitify.app.data.Song
+import com.spitify.app.data.StreamResolver
 import com.spitify.app.playback.PlaybackService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.spitify.app.playback.toMediaItem
 import com.spitify.app.playback.toSong
 
@@ -40,6 +46,7 @@ object PlayerConnection {
         private set
     var error by mutableStateOf<String?>(null)
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var future: ListenableFuture<MediaController>? = null
     private var pending: ((MediaController) -> Unit)? = null
 
@@ -118,6 +125,29 @@ object PlayerConnection {
             if (c.playbackState == Player.STATE_ENDED) c.seekToDefaultPosition()
             c.play()
         }
+    }
+
+    /** Plays the song now, then queues songs YouTube relates to it. */
+    fun startRadio(song: Song) {
+        play(listOf(song))
+        scope.launch {
+            val related = withContext(Dispatchers.IO) {
+                runCatching { StreamResolver.resolve(song.id).related }.getOrDefault(emptyList())
+            }
+            withController { c ->
+                val queued = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
+                c.addMediaItems(related.filter { it.id !in queued }.take(25).map { it.toMediaItem() })
+            }
+        }
+    }
+
+    fun clearUpcoming() = withController { c ->
+        val from = c.currentMediaItemIndex + 1
+        if (from < c.mediaItemCount) c.removeMediaItems(from, c.mediaItemCount)
+    }
+
+    fun move(from: Int, to: Int) = withController { c ->
+        if (from in 0 until c.mediaItemCount && to in 0 until c.mediaItemCount) c.moveMediaItem(from, to)
     }
 
     fun next() = withController { it.seekToNext() }
