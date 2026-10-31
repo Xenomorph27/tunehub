@@ -173,7 +173,9 @@ object YouTube {
         }
         val album = AlbumRef(
             url = url,
-            title = info.name.ifBlank { hint?.title.orEmpty() },
+            // YouTube names album playlists "Album – Title"
+            title = hint?.title?.takeIf { it.isNotBlank() }
+                ?: info.name.replace(Regex("""^(Album|EP|Single)\s+[–-]\s+"""), ""),
             subtitle = hint?.subtitle?.takeIf { it.isNotBlank() } ?: cleanArtist(info.uploaderName),
             thumb = hint?.thumb ?: biggest(info.thumbnails) ?: songs.firstOrNull()?.thumb,
             isAlbum = hint?.isAlbum ?: true,
@@ -198,7 +200,8 @@ object YouTube {
     fun InfoItem.toBrowseItem(isAlbum: Boolean): BrowseItem? = when (this) {
         is StreamInfoItem -> toSong()?.let { BrowseItem.SongItem(it) }
         is ChannelInfoItem -> BrowseItem.ArtistItem(
-            ArtistRef(url = url, name = cleanArtist(name), thumb = biggest(thumbnails), subscribers = subscriberCount)
+            // the search result's subscriber count is misparsed (10x off); the artist page has the real one
+            ArtistRef(url = url, name = cleanArtist(name), thumb = biggest(thumbnails))
         )
         is PlaylistInfoItem -> BrowseItem.AlbumItem(toAlbum(isAlbum))
         else -> null
