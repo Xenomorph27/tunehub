@@ -51,7 +51,7 @@ adb shell am start -n com.spitify.app/com.tunehub.app.ui.MainActivity
 sleep 10
 shot 01-home
 
-tap desc "Search"; sleep 3
+tap text "Search songs, artists, albums" || tap desc "Search"; sleep 3
 shot 02-search-home
 
 tap class "android.widget.EditText"; sleep 1

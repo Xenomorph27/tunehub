@@ -7,8 +7,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-// CI passes the run number so every build installs as an update over the previous one
-val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+// CI passes the build number so every build installs as an update over the previous one
+val buildNumber = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 1
 val keystorePath: String? = System.getenv("TUNEHUB_KEYSTORE")
 
 android {

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -122,7 +123,12 @@ private fun AppRoot() {
 
     BackHandler(enabled = nav.canGoBack) { nav.back() }
 
-    CompositionLocalProvider(LocalNav provides nav, LocalSongMenu provides { menu = it }) {
+    // no Scaffold/Surface any more, so set the default text and icon color for every screen here
+    CompositionLocalProvider(
+        LocalNav provides nav,
+        LocalSongMenu provides { menu = it },
+        LocalContentColor provides Aurora.Text,
+    ) {
         Box(Modifier.fillMaxSize()) {
             AuroraBackground(tint = if (hasPlayer) artTint else null)
 
