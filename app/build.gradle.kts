@@ -93,6 +93,8 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.3")
 
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    // the extractor's JSON library, same commit it uses; needed to read player responses directly
+    implementation("com.github.TeamNewPipe:nanojson:e9d656ddb49a412a5a0a5d5ef20ca7ef09549996")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation("androidx.core:core-ktx:1.15.0")

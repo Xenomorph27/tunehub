@@ -205,8 +205,9 @@ private fun rememberLyrics(song: Song): LyricsState =
 
 /** "OPUS 160K", or "OFFLINE" for downloads; appears once the service has resolved the stream. */
 @Composable
-private fun rememberQuality(song: Song): String? =
-    produceState<String?>(null, song.id) {
+private fun rememberQuality(song: Song, hiRes: Boolean): String? =
+    // re-read after a quality switch
+    produceState<String?>(null, song.id, hiRes) {
         value = null
         repeat(30) {
             if (TuneHubApp.downloads.fileFor(song.id) != null) {
@@ -234,11 +235,14 @@ fun NowPlayingScreen(onClose: () -> Unit) {
     val likedIds by TuneHubApp.library.likedIds.collectAsStateWithLifecycle()
     val sleep by SleepTimer.state.collectAsStateWithLifecycle()
     val liked = song.id in likedIds
+    val settings by TuneHubApp.library.data.collectAsStateWithLifecycle()
+    val hiRes = !settings.dataSaver
+    val ultra = settings.eq.ultra
+    val quality = rememberQuality(song, hiRes)
     val position = rememberPosition(250)
     val duration = PlayerConnection.durationMs
     val glow = rememberArtColor(song.thumb, fallback = Aurora.Violet)
     val lyrics = rememberLyrics(song)
-    val quality = rememberQuality(song)
 
     var seekPreview by remember { mutableStateOf<Float?>(null) }
     var showQueue by remember { mutableStateOf(false) }
@@ -359,6 +363,8 @@ fun NowPlayingScreen(onClose: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         GlassChip("Lyrics") { if (lyrics is LyricsState.Found) showLyrics = true }
+                        GlassChip("Hi-Res", selected = hiRes) { PlayerConnection.setHiRes(!hiRes) }
+                        GlassChip("UltraTune", selected = ultra) { TuneHubApp.library.updateEq { it.copy(ultra = !it.ultra) } }
                         GlassChip("Queue") { showQueue = true }
                         GlassChip(sleepLabel(sleep), selected = sleep != SleepTimer.State.Off) { showSleep = true }
                         Box(

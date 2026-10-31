@@ -13,6 +13,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.Song
 import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.playback.PlaybackService
@@ -132,7 +133,7 @@ object PlayerConnection {
         play(listOf(song))
         scope.launch {
             val related = withContext(Dispatchers.IO) {
-                runCatching { StreamResolver.resolve(song.id).related }.getOrDefault(emptyList())
+                runCatching { StreamResolver.related(song.id) }.getOrDefault(emptyList())
             }
             withController { c ->
                 val queued = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
@@ -148,6 +149,13 @@ object PlayerConnection {
 
     fun move(from: Int, to: Int) = withController { c ->
         if (from in 0 until c.mediaItemCount && to in 0 until c.mediaItemCount) c.moveMediaItem(from, to)
+    }
+
+    /** Switches stream quality and reloads the current song at the same spot so it applies now. */
+    fun setHiRes(on: Boolean) {
+        TuneHubApp.library.setDataSaver(!on)
+        StreamResolver.dataSaver = !on
+        PlaybackService.reloadCurrent()
     }
 
     fun next() = withController { it.seekToNext() }

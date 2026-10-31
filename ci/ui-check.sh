@@ -104,6 +104,8 @@ tap desc "Home"; sleep 3
 shot 15-home-after
 tap desc "Settings"; sleep 3
 shot 16-settings
+tap prefix "Equalizer"; sleep 3
+shot 17-equalizer
 
 adb logcat -d > "$OUT/logcat.txt"
 if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then

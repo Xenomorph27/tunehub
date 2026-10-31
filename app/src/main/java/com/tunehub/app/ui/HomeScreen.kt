@@ -76,7 +76,7 @@ class HomeViewModel : ViewModel() {
         seedId = seed.id
         viewModelScope.launch {
             val related = withContext(Dispatchers.IO) {
-                runCatching { StreamResolver.resolve(seed.id).related }.getOrDefault(emptyList())
+                runCatching { StreamResolver.related(seed.id) }.getOrDefault(emptyList())
             }
             if (related.isNotEmpty()) quickPicks = related.distinctBy { it.id }.take(10)
         }
@@ -379,6 +379,7 @@ private fun SongCard(song: Song, onClick: () -> Unit) {
     Column(
         Modifier
             .width(144.dp)
+            .prefetchOnTouch(song.id)
             .clickable(onClick = onClick),
     ) {
         Artwork(song.thumb, 144.dp, corner = 26.dp)

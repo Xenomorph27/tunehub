@@ -9,6 +9,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -80,6 +83,7 @@ import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.AlbumRef
 import com.tunehub.app.data.ArtistRef
 import com.tunehub.app.data.Song
+import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.data.formatDuration
 import com.tunehub.app.data.thumbSized
 import kotlinx.coroutines.Dispatchers
@@ -197,6 +201,14 @@ private suspend fun extractColor(context: Context, url: String): Color? = runCat
 
 // ------------------------------------------------------------------ song rows & actions
 
+/** Starts looking up a song's stream as soon as a finger touches it, before the tap completes. */
+fun Modifier.prefetchOnTouch(songId: String): Modifier = pointerInput(songId) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        StreamResolver.prefetch(songId)
+    }
+}
+
 /** Opens the song actions sheet; provided by the app root so there's only ever one sheet. */
 class SongMenuRequest(val song: Song, val playlistId: String?)
 
@@ -219,6 +231,7 @@ fun SongRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .prefetchOnTouch(song.id)
             .combinedClickable(onClick = onClick, onLongClick = { openMenu(SongMenuRequest(song, playlistId)) })
             .padding(start = 20.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -13,6 +13,7 @@ sealed interface Route {
     data object Liked : Route
     data object Downloads : Route
     data object Settings : Route
+    data object Equalizer : Route
     data class LocalPlaylist(val id: String) : Route
     data class Album(val album: AlbumRef) : Route
     data class Artist(val artist: ArtistRef) : Route

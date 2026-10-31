@@ -59,13 +59,14 @@ jobs:
           name: tunehub-apk
           path: app/build/outputs/apk/release/*.apk
 
-      - name: Publish to the "latest" release
+      # One release per build, never deleted, so GitHub's download counts add up across builds
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk tunehub.apk
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest tunehub.apk \
+          gh release create "build-$BUILD_NUMBER" tunehub.apk \
             --title "TuneHub build $BUILD_NUMBER" \
-            --notes "Built from ${{ github.sha }}. Download tunehub.apk on your phone and install it." \
-            --target "${{ github.sha }}"
+            --notes "Download **tunehub.apk** below and open it on your Android phone. It installs over older versions and keeps your library." \
+            --target "${{ github.sha }}" \
+            --latest

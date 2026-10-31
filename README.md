@@ -9,6 +9,7 @@ Search anything, tap play, lock your phone. No ads, no account, no subscription.
 
 [![Download APK](https://img.shields.io/github/v/release/Xenomorph27/tunehub?label=download&logo=android&color=7B4DFF)](https://github.com/Xenomorph27/tunehub/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/Xenomorph27/tunehub/build.yml?branch=main&label=build)](https://github.com/Xenomorph27/tunehub/actions/workflows/build.yml)
+[![Downloads](https://img.shields.io/github/downloads/Xenomorph27/tunehub/total?label=downloads&color=FFB547)](https://github.com/Xenomorph27/tunehub/releases)
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-6FF3FF?logo=android)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FF3FB4)](LICENSE)
 
@@ -30,6 +31,12 @@ New versions install right over the old one and keep your library.
 
 ## What it does
 
+- **Fast start**: one request to YouTube before audio begins, and songs start loading the
+  moment your finger touches them.
+- **Hi-Res toggle** right on the Now Playing screen, and **UltraTune**: one tap for deep bass,
+  clear vocals, crisp highs, a wide 3D stage and extra loudness.
+- **Built-in equalizer** with presets, per-band sliders, bass boost, 3D sound and loudness.
+
 - **Search with filters**: All, Songs, Artists, Albums, Playlists, Videos. "All" gives a top
   result plus a few of each, with suggestions as you type, recent searches and genre tiles.
 - **Artist pages** with popular songs, discography and music videos. Follow your favourites.
@@ -41,7 +48,7 @@ New versions install right over the old one and keep your library.
 - **Background playback** with lock-screen, notification and headphone controls.
 - **Radio and autoplay**: start a radio from any song; when your queue ends it keeps going
   with related music. Home builds radio mixes from the artists you play.
-- **Offline downloads**, a 512 MB streaming cache, a data-saver mode and an equalizer shortcut.
+- **Offline downloads** and a 512 MB streaming cache.
 - **Share to TuneHub**: share any YouTube or YouTube Music link to the app to play it.
 
 ## How it works

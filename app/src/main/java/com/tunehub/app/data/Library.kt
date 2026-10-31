@@ -18,6 +18,18 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.UUID
 
+/** Sound settings: equalizer band levels in millibels, effect strengths 0..1000, loudness gain in millibels. */
+@Serializable
+data class EqSettings(
+    val enabled: Boolean = false,
+    val preset: String = "Flat",
+    val bands: List<Int> = emptyList(),
+    val bass: Int = 0,
+    val virtualizer: Int = 0,
+    val loudness: Int = 0,
+    val ultra: Boolean = false,
+)
+
 @Serializable
 data class LibraryData(
     val liked: List<Song> = emptyList(),
@@ -29,6 +41,7 @@ data class LibraryData(
     val searches: List<String> = emptyList(),
     val autoplay: Boolean = true,
     val dataSaver: Boolean = false,
+    val eq: EqSettings = EqSettings(),
 )
 
 /** Everything the user saves, kept in a JSON file in app storage. */
@@ -131,6 +144,8 @@ class Library(context: Context) {
     fun setAutoplay(enabled: Boolean) = update { it.copy(autoplay = enabled) }
 
     fun setDataSaver(enabled: Boolean) = update { it.copy(dataSaver = enabled) }
+
+    fun updateEq(change: (EqSettings) -> EqSettings) = update { it.copy(eq = change(it.eq)) }
 
     // ---------------------------------------------------------------- storage
 

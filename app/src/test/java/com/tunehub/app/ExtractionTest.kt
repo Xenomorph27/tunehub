@@ -67,7 +67,7 @@ class ExtractionTest {
         assertTrue("search returned nothing", songs.isNotEmpty())
 
         val stream = StreamResolver.resolve(songs.first().id)
-        println("stream host: ${stream.url.substringAfter("://").substringBefore("/")}, related: ${stream.related.size}")
+        println("stream host: ${stream.url.substringAfter("://").substringBefore("/")}, quality: ${stream.quality}")
         val request = Request.Builder()
             .url(stream.url + "&rn=1")
             .post(byteArrayOf(0x78, 0).toRequestBody())

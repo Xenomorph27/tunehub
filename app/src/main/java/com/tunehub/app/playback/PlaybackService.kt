@@ -36,6 +36,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -67,6 +69,8 @@ class PlaybackService : MediaSessionService() {
         // cache keyed by the stable tunehub:// URI, so replays and seeks skip the network
         val cached = CacheDataSource.Factory()
             .setCache(cache(this))
+            // hi-res and data-saver streams of one song must never mix in the cache
+            .setCacheKeyFactory { spec -> spec.uri.toString() + if (StreamResolver.dataSaver) "#lo" else "#hi" }
             .setUpstreamDataSourceFactory(resolving)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
@@ -91,6 +95,10 @@ class PlaybackService : MediaSessionService() {
         exo.addListener(listener)
         player = exo
         announceAudioSession(true)
+        AudioFx.attach(exo.audioSessionId)
+        scope.launch {
+            TuneHubApp.library.data.map { it.eq }.distinctUntilChanged().collect { AudioFx.apply(it) }
+        }
 
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
@@ -111,6 +119,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         scope.cancel()
+        AudioFx.release()
         SleepTimer.cancel()
         announceAudioSession(false)
         player = null
@@ -172,6 +181,10 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val listener = object : Player.Listener {
+        override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            AudioFx.attach(audioSessionId)
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             mediaItem ?: return
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) radioSeedId = null
@@ -235,7 +248,7 @@ class PlaybackService : MediaSessionService() {
 
         scope.launch {
             val related = withContext(Dispatchers.IO) {
-                runCatching { StreamResolver.resolve(seed).related }.getOrDefault(emptyList())
+                runCatching { StreamResolver.related(seed) }.getOrDefault(emptyList())
             }
             val queued = (0 until exo.mediaItemCount).map { exo.getMediaItemAt(it).mediaId }.toSet()
             val additions = related.filter { it.id !in queued }.take(RADIO_BATCH)
@@ -263,5 +276,18 @@ class PlaybackService : MediaSessionService() {
         ).also { sharedCache = it }
 
         fun cacheBytes(): Long = sharedCache?.cacheSpace ?: 0L
+
+        /** Reloads the queue at the same spot, e.g. so a quality switch takes effect right away. */
+        fun reloadCurrent() {
+            val p = player ?: return
+            if (p.mediaItemCount == 0) return
+            val items = (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }
+            val index = p.currentMediaItemIndex
+            val position = p.currentPosition
+            val playWhenReady = p.playWhenReady
+            p.setMediaItems(items, index, position)
+            p.prepare()
+            p.playWhenReady = playWhenReady
+        }
     }
 }

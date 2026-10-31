@@ -36,6 +36,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val library = TuneHubApp.library
     val data by library.data.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val nav = LocalNav.current
     val downloadsMb = remember(data.downloads.size) { TuneHubApp.downloads.usedBytes() / (1024 * 1024) }
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
@@ -53,18 +54,8 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         Header("Playback")
         ToggleRow("Autoplay", "Keep playing similar songs when your queue ends", data.autoplay, library::setAutoplay)
-        ToggleRow("Data saver", "Stream lower quality audio to use less mobile data", data.dataSaver, library::setDataSaver)
-        ActionRow("Equalizer", "Open your phone's sound equalizer") {
-            val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
-                .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, PlaybackService.player?.audioSessionId ?: 0)
-                .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
-                .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
-            try {
-                context.startActivity(intent)
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(context, "No equalizer app on this phone", Toast.LENGTH_SHORT).show()
-            }
-        }
+        ToggleRow("Hi-Res audio", "Stream the best quality YouTube offers. Off saves mobile data", !data.dataSaver) { PlayerConnection.setHiRes(it) }
+        ActionRow("Equalizer & UltraTune", "Bass, treble, vocals, 3D sound and loudness") { nav.open(Route.Equalizer) }
 
         Header("Storage")
         ActionRow("Downloads", "${data.downloads.size} songs • $downloadsMb MB") {}
@@ -76,7 +67,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         ActionRow("Version", version) {}
         ActionRow("Get the latest build", "Opens the GitHub releases page") {
             context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Xenomorph27/tunehub/releases/tag/latest"))
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Xenomorph27/tunehub/releases/latest"))
             )
         }
         Text(
