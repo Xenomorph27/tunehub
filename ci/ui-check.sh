@@ -14,7 +14,14 @@ dump() {
   for _ in 1 2 3 4 5; do
     adb shell rm -f /sdcard/ui.xml
     adb shell uiautomator dump /sdcard/ui.xml > /tmp/dump.log 2>&1
-    adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null 2>&1 && return 0
+    if adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null 2>&1; then
+      # the CI emulator's launcher sometimes throws an "isn't responding" dialog over us
+      if python3 ci/find_node.py /tmp/ui.xml contains "isn't responding" > /dev/null; then
+        xy=$(python3 ci/find_node.py /tmp/ui.xml text "Wait") && adb shell input tap $xy
+        echo "dismissed system dialog"; sleep 2; continue
+      fi
+      return 0
+    fi
     sleep 2
   done
   echo "dump failed: $(cat /tmp/dump.log)"
@@ -35,6 +42,9 @@ tap() {
   return 1
 }
 
+# let the freshly booted emulator settle before driving it
+sleep 60
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null
 adb install -r "$APK"
 adb logcat -c
 adb shell am start -n com.spitify.app/.ui.MainActivity
