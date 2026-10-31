@@ -82,14 +82,13 @@ fun AlbumScreen(album: AlbumRef, onBack: () -> Unit) {
     // album pages list tracks by number; their thumbnails are all the same cover
     val isAlbum = info.isAlbum
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    BackPage(onBack) {
         item {
             CollectionHeader(
                 title = info.title,
                 subtitle = info.subtitle,
                 meta = listOf(if (isAlbum) "Album" else "Playlist", songMeta(songs)).filter { it.isNotBlank() }.joinToString(" • "),
                 tint = tint,
-                onBack = onBack,
                 art = { Artwork(info.thumb, 220.dp, corner = 6.dp, placeholder = AppIcons.Album) },
                 playEnabled = songs.isNotEmpty(),
                 onPlay = { PlayerConnection.play(songs) },
@@ -131,14 +130,13 @@ fun AlbumScreen(album: AlbumRef, onBack: () -> Unit) {
 fun LikedScreen(onBack: () -> Unit) {
     val data by SpitifyApp.library.data.collectAsStateWithLifecycle()
     val songs = data.liked
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    BackPage(onBack) {
         item {
             CollectionHeader(
                 title = "Liked Songs",
                 subtitle = "",
                 meta = songMeta(songs),
                 tint = androidx.compose.ui.graphics.Color(0xFF3A2D8C),
-                onBack = onBack,
                 art = { LikedCover(220.dp, corner = 6.dp) },
                 playEnabled = songs.isNotEmpty(),
                 onPlay = { PlayerConnection.play(songs) },
@@ -158,14 +156,13 @@ fun DownloadsScreen(onBack: () -> Unit) {
     val data by SpitifyApp.library.data.collectAsStateWithLifecycle()
     val progress by SpitifyApp.downloads.progress.collectAsStateWithLifecycle()
     val songs = data.downloads
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    BackPage(onBack) {
         item {
             CollectionHeader(
                 title = "Downloads",
                 subtitle = "",
                 meta = songMeta(songs) + if (progress.isNotEmpty()) " • ${progress.size} downloading" else "",
                 tint = androidx.compose.ui.graphics.Color(0xFF0C5A41),
-                onBack = onBack,
                 art = { DownloadsCover(220.dp, corner = 6.dp) },
                 playEnabled = songs.isNotEmpty(),
                 onPlay = { PlayerConnection.play(songs) },
@@ -204,14 +201,13 @@ fun LocalPlaylistScreen(id: String, onBack: () -> Unit) {
     }
     val songs = playlist.songs
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    BackPage(onBack) {
         item {
             CollectionHeader(
                 title = playlist.name,
                 subtitle = "",
                 meta = "Playlist • " + songMeta(songs),
                 tint = rememberArtColor(songs.firstOrNull()?.thumb),
-                onBack = onBack,
                 art = { PlaylistCover(songs, 220.dp, corner = 6.dp) },
                 playEnabled = songs.isNotEmpty(),
                 onPlay = { PlayerConnection.play(songs) },

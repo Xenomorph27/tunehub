@@ -78,12 +78,14 @@ shot 09-album
 tap desc "Play"; sleep 12
 shot 10-after-play
 
-tap desc "Like" || tap desc "Unlike"
-sleep 1
-# the mini player row: tap its left part to open Now Playing
-dump
-y=$(python3 ci/find_node.py /tmp/ui.xml desc "Unlike" | cut -d' ' -f2) || y=""
-[ -n "$y" ] && adb shell input tap 200 "$y"
+# tap the mini player's left side (found via its like button) to open Now Playing
+y=""
+for _ in 1 2 3; do
+  dump && y=$(python3 ci/find_node.py /tmp/ui.xml desc "Like" || python3 ci/find_node.py /tmp/ui.xml desc "Unlike") && break
+  sleep 2
+done
+y=$(echo "$y" | cut -d' ' -f2)
+[ -n "$y" ] && adb shell input tap 200 "$y" && echo "opened now playing"
 sleep 5
 shot 11-now-playing
 adb shell input swipe 540 1900 540 600 400; sleep 4

@@ -82,7 +82,7 @@ fun ArtistScreen(artist: ArtistRef, onBack: () -> Unit) {
     val following = data.artists.any { it.url == artist.url }
     val tint = rememberArtColor(info.thumb)
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    BackPage(onBack) {
         item {
             Box(
                 Modifier
@@ -105,9 +105,6 @@ fun ArtistScreen(artist: ArtistRef, onBack: () -> Unit) {
                         .fillMaxSize()
                         .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.25f), Color.Transparent, MaterialTheme.colorScheme.background))),
                 )
-                IconButton(onClick = onBack, modifier = Modifier.padding(4.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                }
                 Text(
                     info.name,
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),

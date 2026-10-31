@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -507,7 +509,6 @@ fun CollectionHeader(
     subtitle: String,
     meta: String,
     tint: Color,
-    onBack: () -> Unit,
     art: @Composable () -> Unit,
     playEnabled: Boolean,
     onPlay: () -> Unit,
@@ -521,11 +522,14 @@ fun CollectionHeader(
             .fillMaxWidth()
             .background(Brush.verticalGradient(listOf(tint, MaterialTheme.colorScheme.background))),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Spacer(Modifier.weight(1f))
-            topActions()
-        }
+        // the back arrow floats above the page (see BackPage); this row leaves room for it
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) { topActions() }
         Box(
             Modifier
                 .fillMaxWidth()
@@ -566,6 +570,21 @@ fun CollectionHeader(
                 PlayCircle(enabled = playEnabled, onClick = onPlay)
             }
         }
+    }
+}
+
+/** A scrolling page with a back button that stays put while the content scrolls. */
+@Composable
+fun BackPage(onBack: () -> Unit, content: LazyListScope.() -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), content = content)
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .padding(4.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.35f)),
+        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
     }
 }
 
