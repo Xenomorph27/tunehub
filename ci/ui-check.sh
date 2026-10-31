@@ -57,6 +57,8 @@ shot 02-search-home
 tap class "android.widget.EditText"; sleep 1
 adb shell input text "arijit%ssingh"; adb shell input keyevent 66
 sleep 14
+# uiautomator only sees the keyboard while it is up; the app should have hidden it
+if adb shell dumpsys input_method | grep -q "mInputShown=true"; then echo "keyboard still shown after search"; adb shell input keyevent 4; fi
 shot 03-search-all
 adb shell input swipe 540 1800 540 700 400; sleep 2
 shot 04-search-all-scrolled
@@ -93,6 +95,7 @@ tap text "Your Library"; sleep 3
 shot 13-library
 tap desc "Create playlist"; sleep 2
 adb shell input text "Road%strip"; sleep 1
+adb shell dumpsys input_method | grep -q "mInputShown=true" && adb shell input keyevent 4
 tap text "Save"; sleep 3
 shot 14-new-playlist
 

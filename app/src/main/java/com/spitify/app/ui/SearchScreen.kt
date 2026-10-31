@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -202,7 +203,10 @@ private val genres = listOf(
 
 @Composable
 fun SearchScreen(vm: SearchViewModel) {
-    val focus = LocalFocusManager.current
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    // hide the keyboard so results aren't half covered
+    val dismissKeyboard = { keyboard?.hide(); focusManager.clearFocus() }
     val nav = LocalNav.current
 
     Column(Modifier.fillMaxSize()) {
@@ -239,7 +243,7 @@ fun SearchScreen(vm: SearchViewModel) {
                 cursorColor = Ink,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { focus.clearFocus(); vm.submit() }),
+            keyboardActions = KeyboardActions(onSearch = { dismissKeyboard(); vm.submit() }),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
@@ -247,11 +251,11 @@ fun SearchScreen(vm: SearchViewModel) {
 
         when {
             !vm.showingResults && vm.suggestions.isNotEmpty() -> Suggestions(vm.suggestions) { s ->
-                focus.clearFocus()
+                dismissKeyboard()
                 vm.submit(s)
             }
             !vm.showingResults -> SearchHome(
-                onSearch = { q -> focus.clearFocus(); vm.submit(q) },
+                onSearch = { q -> dismissKeyboard(); vm.submit(q) },
                 onGenre = { nav.open(Route.Genre(it)) },
             )
             else -> {
