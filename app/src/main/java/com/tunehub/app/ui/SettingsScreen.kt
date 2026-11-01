@@ -22,6 +22,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -40,6 +42,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     val data by library.data.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val nav = LocalNav.current
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmDialog(confirm) { confirm = null }
     // measuring files is disk work: do it off the main thread
     val downloadsMb by produceState(0L, data.downloads.size) {
         value = withContext(Dispatchers.IO) { TuneHubApp.downloads.usedBytes() / (1024 * 1024) }
@@ -88,8 +92,16 @@ fun SettingsScreen(onBack: () -> Unit) {
         Header("Storage")
         ActionRow("Downloads", "${data.downloads.size} songs • $downloadsMb MB") {}
         ActionRow("Streaming cache", "Up to 512 MB of recently played audio, cleared automatically") {}
-        ActionRow("Clear listening history", "${data.recent.size} songs in Recently played") { library.clearRecent() }
-        ActionRow("Clear search history", "${data.searches.size} recent searches") { library.clearSearches() }
+        ActionRow("Clear listening history", "${data.recent.size} songs in Recently played") {
+            confirm = ConfirmRequest("Clear listening history?", "Recently played and Quick picks will start fresh.", "Clear") {
+                library.clearRecent()
+            }
+        }
+        ActionRow("Clear search history", "${data.searches.size} recent searches") {
+            confirm = ConfirmRequest("Clear search history?", "Your recent searches will be removed.", "Clear") {
+                library.clearSearches()
+            }
+        }
 
         Header("About")
         ActionRow("Version", version) {}

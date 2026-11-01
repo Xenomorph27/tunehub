@@ -192,6 +192,8 @@ fun LocalPlaylistScreen(id: String, onBack: () -> Unit) {
     val library = TuneHubApp.library
     val data by library.data.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmDialog(confirm) { confirm = null }
     val playlist = data.playlists.find { it.id == id }
     if (playlist == null) {
         // deleted while open
@@ -213,7 +215,13 @@ fun LocalPlaylistScreen(id: String, onBack: () -> Unit) {
                 onShuffle = { shuffle(songs) },
                 topActions = {
                     GlassIconButton(Icons.Default.Edit, "Rename") { renaming = true }
-                    GlassIconButton(Icons.Default.Delete, "Delete playlist") { library.deletePlaylist(playlist.id) }
+                    GlassIconButton(Icons.Default.Delete, "Delete playlist") {
+                        confirm = ConfirmRequest(
+                            "Delete \"${playlist.name}\"?",
+                            "This playlist and its ${songs.size} songs will be removed from your library. This can't be undone.",
+                            "Delete",
+                        ) { library.deletePlaylist(playlist.id) }
+                    }
                 },
                 actions = { DownloadAllButton(songs) },
             )

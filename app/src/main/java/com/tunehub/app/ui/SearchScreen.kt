@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -306,12 +307,20 @@ private fun Suggestions(suggestions: List<String>, onPick: (String) -> Unit) {
 /** What the Search tab shows before you type: recent searches and genre tiles. */
 @Composable
 private fun SearchHome(onSearch: (String) -> Unit, onGenre: (String) -> Unit) {
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmDialog(confirm) { confirm = null }
     val library = TuneHubApp.library
     val data by library.data.collectAsStateWithLifecycle()
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         if (data.searches.isNotEmpty()) {
-            item { SectionTitle("Recent searches", action = "Clear", onAction = library::clearSearches) }
+            item {
+                SectionTitle("Recent searches", action = "Clear") {
+                    confirm = ConfirmRequest("Clear search history?", "Your recent searches will be removed.", "Clear") {
+                        library.clearSearches()
+                    }
+                }
+            }
             items(data.searches, key = { "q-$it" }) { q ->
                 Row(
                     Modifier

@@ -295,6 +295,8 @@ fun SongActionsSheet(request: SongMenuRequest, onDismiss: () -> Unit) {
     val nav = LocalNav.current
     val context = LocalContext.current
     var pickingPlaylist by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmDialog(confirm) { confirm = null }
 
     val liked = song.id in likedIds
     val downloaded = song.id in downloadedIds
@@ -328,7 +330,13 @@ fun SongActionsSheet(request: SongMenuRequest, onDismiss: () -> Unit) {
         SheetAction(AppIcons.QueueMusic, "Add to queue") { PlayerConnection.enqueue(song); onDismiss() }
         SheetAction(AppIcons.Radio, "Start song radio") { PlayerConnection.startRadio(song); onDismiss() }
         when {
-            downloaded -> SheetAction(Icons.Default.Delete, "Remove download") { downloads.remove(song.id); onDismiss() }
+            downloaded -> SheetAction(Icons.Default.Delete, "Remove download") {
+                confirm = ConfirmRequest(
+                    "Remove download?",
+                    "\"${song.title}\" will no longer play offline. You can download it again any time.",
+                    "Remove",
+                ) { downloads.remove(song.id); onDismiss() }
+            }
             downloading -> SheetAction(AppIcons.Download, "Downloading…", enabled = false) {}
             else -> SheetAction(AppIcons.Download, "Download") { downloads.download(song); onDismiss() }
         }
@@ -341,8 +349,14 @@ fun SongActionsSheet(request: SongMenuRequest, onDismiss: () -> Unit) {
         SheetAction(Icons.Default.Share, "Share") { shareSong(context, song); onDismiss() }
         if (request.playlistId != null) {
             SheetAction(Icons.Default.Delete, "Remove from this playlist") {
-                library.removeFromPlaylist(request.playlistId, song.id)
-                onDismiss()
+                confirm = ConfirmRequest(
+                    "Remove from playlist?",
+                    "\"${song.title}\" will be removed from this playlist.",
+                    "Remove",
+                ) {
+                    library.removeFromPlaylist(request.playlistId, song.id)
+                    onDismiss()
+                }
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -621,13 +635,23 @@ fun DownloadAllButton(songs: List<Song>) {
     val progress by TuneHubApp.downloads.progress.collectAsStateWithLifecycle()
     val all = songs.isNotEmpty() && songs.all { it.id in downloadedIds }
     val busy = songs.any { progress.containsKey(it.id) }
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    ConfirmDialog(confirm) { confirm = null }
 
     Box(
         Modifier
             .size(48.dp)
             .glass(RoundedCornerShape(17.dp))
             .clickable(enabled = songs.isNotEmpty() && !busy) {
-                if (all) TuneHubApp.downloads.removeAll(songs.map { it.id }) else TuneHubApp.downloads.downloadAll(songs)
+                if (all) {
+                    confirm = ConfirmRequest(
+                        "Remove ${songs.size} downloads?",
+                        "These songs will no longer play offline. You can download them again any time.",
+                        "Remove all",
+                    ) { TuneHubApp.downloads.removeAll(songs.map { it.id }) }
+                } else {
+                    TuneHubApp.downloads.downloadAll(songs)
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -716,3 +740,22 @@ fun ErrorBox(message: String, onRetry: () -> Unit) {
     }
 }
 
+
+/** A destructive action waiting for the user to confirm it. */
+class ConfirmRequest(val title: String, val message: String, val confirmLabel: String, val action: () -> Unit)
+
+/** Asks before anything is deleted; nothing happens unless the user taps the red button. */
+@Composable
+fun ConfirmDialog(request: ConfirmRequest?, onDismiss: () -> Unit) {
+    request ?: return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Aurora.Sheet,
+        title = { Text(request.title, style = MaterialTheme.typography.headlineSmall) },
+        text = { Text(request.message, style = MaterialTheme.typography.bodyLarge, color = Aurora.Muted) },
+        confirmButton = {
+            TextButton(onClick = { request.action(); onDismiss() }) { Text(request.confirmLabel, color = Aurora.Pink) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Aurora.Text) } },
+    )
+}
