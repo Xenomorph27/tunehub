@@ -627,7 +627,7 @@ fun DownloadAllButton(songs: List<Song>) {
             .size(48.dp)
             .glass(RoundedCornerShape(17.dp))
             .clickable(enabled = songs.isNotEmpty() && !busy) {
-                if (all) songs.forEach { TuneHubApp.downloads.remove(it.id) } else TuneHubApp.downloads.downloadAll(songs)
+                if (all) TuneHubApp.downloads.removeAll(songs.map { it.id }) else TuneHubApp.downloads.downloadAll(songs)
             },
         contentAlignment = Alignment.Center,
     ) {

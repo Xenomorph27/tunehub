@@ -45,7 +45,7 @@ tap() {
 # let the freshly booted emulator settle before driving it
 sleep 60
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null
-adb install -r "$APK"
+adb install -r "$APK" || { echo "::error::APK failed to install"; exit 1; }
 adb logcat -c
 adb shell am start -n com.spitify.app/com.tunehub.app.ui.MainActivity
 sleep 10
@@ -108,8 +108,10 @@ tap prefix "Equalizer"; sleep 3
 shot 17-equalizer
 
 adb logcat -d > "$OUT/logcat.txt"
-if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then
-  echo "::error::App crashed"
+# only crashes of TuneHub itself count (the emulator's own apps sometimes crash)
+if grep -A3 "FATAL EXCEPTION" "$OUT/logcat.txt" | grep -q "Process: com.spitify.app"; then
+  echo "::error::TuneHub crashed during the UI check"
   grep -A40 "FATAL EXCEPTION" "$OUT/logcat.txt" | head -80
+  exit 1
 fi
-exit 0
+echo "UI check finished without crashes"

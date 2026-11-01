@@ -195,8 +195,23 @@ object YouTube {
 
     /** Pulls the video id out of any youtube.com / youtu.be / music.youtube.com link. */
     fun videoIdFromText(text: String): String? =
-        Regex("""(?:v=|youtu\.be/|/shorts/|/embed/|/live/)([A-Za-z0-9_-]{11})""")
-            .find(text)?.groupValues?.get(1)
+        Regex("""https?://\S+""").findAll(text).firstNotNullOfOrNull { videoIdFromUrl(it.value) }
+
+    private val youtubeHosts = setOf("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be")
+
+    // only real YouTube links: an unrelated URL with "v=" in it is ignored
+    private fun videoIdFromUrl(url: String): String? {
+        val uri = runCatching { java.net.URI(url.trimEnd('.', ',', ')', '!')) }.getOrNull() ?: return null
+        val host = uri.host?.lowercase() ?: return null
+        if (host !in youtubeHosts) return null
+        val path = uri.path.orEmpty().trim('/').split('/')
+        val id = when {
+            host == "youtu.be" -> path.firstOrNull()
+            path.firstOrNull() in setOf("shorts", "embed", "live") -> path.getOrNull(1)
+            else -> uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("v=") }?.removePrefix("v=")
+        }
+        return id?.takeIf(::isValidVideoId)
+    }
 
     fun InfoItem.toBrowseItem(isAlbum: Boolean): BrowseItem? = when (this) {
         is StreamInfoItem -> toSong()?.let { BrowseItem.SongItem(it) }

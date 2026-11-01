@@ -4,6 +4,7 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
+import android.util.Log
 import com.tunehub.app.data.EqSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,17 +34,26 @@ object AudioFx {
     @Synchronized
     fun attach(sessionId: Int) {
         release()
+        if (sessionId <= 0) return
+        // creating an effect and asking what it supports can both throw on some phones;
+        // a failure costs that effect, never playback
         eq = runCatching { Equalizer(0, sessionId) }.getOrNull()
         bass = runCatching { BassBoost(0, sessionId) }.getOrNull()
         virtualizer = runCatching { Virtualizer(0, sessionId) }.getOrNull()
         loudness = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
         _bands.value = eq?.let { e ->
-            val range = e.bandLevelRange
-            BandInfo(
-                centersHz = (0 until e.numberOfBands).map { e.getCenterFreq(it.toShort()) / 1000 },
-                minMb = range[0].toInt(),
-                maxMb = range[1].toInt(),
-            )
+            runCatching {
+                val range = e.bandLevelRange
+                BandInfo(
+                    centersHz = (0 until e.numberOfBands).map { e.getCenterFreq(it.toShort()) / 1000 },
+                    minMb = range[0].toInt(),
+                    maxMb = range[1].toInt(),
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Equalizer unusable on this device", error)
+                runCatching { e.release() }
+                eq = null
+            }.getOrNull()
         }
         apply(current)
     }
@@ -55,6 +65,7 @@ object AudioFx {
         bass = null
         virtualizer = null
         loudness = null
+        _bands.value = null
     }
 
     @Synchronized
@@ -129,6 +140,7 @@ object AudioFx {
         }
     }
 
+    private const val TAG = "AudioFx"
     private const val ULTRA_BASS = 850
     private const val ULTRA_VIRTUALIZER = 700
     private const val ULTRA_LOUDNESS = 450

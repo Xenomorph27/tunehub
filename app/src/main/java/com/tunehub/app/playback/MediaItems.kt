@@ -4,20 +4,25 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.tunehub.app.data.BoundedCache
 import com.tunehub.app.data.Song
-import java.util.concurrent.ConcurrentHashMap
 
 /** Queue items carry this placeholder URI; PlaybackService swaps in the real stream URL at load time. */
 const val SONG_SCHEME = "tunehub"
 private const val EXTRA_DURATION = "dur"
 private const val EXTRA_ARTIST_URL = "artist_url"
+private const val EXTRA_RADIO = "radio"
 
 /** UI and service share a process, so keep full Song objects instead of relying on metadata round trips. */
-private val knownSongs = ConcurrentHashMap<String, Song>()
+private val knownSongs = BoundedCache<String, Song>(2000)
 
-fun songUri(id: String): Uri = Uri.parse("$SONG_SCHEME://song/$id")
+fun songUri(id: String): Uri = Uri.Builder().scheme(SONG_SCHEME).authority("song").appendPath(id).build()
 
-fun Song.toMediaItem(): MediaItem {
+/**
+ * [radio] marks the seed of a "song radio": the service keeps such a queue going with related
+ * songs even when autoplay is off.
+ */
+fun Song.toMediaItem(radio: Boolean = false): MediaItem {
     knownSongs[id] = this
     return MediaItem.Builder()
         .setMediaId(id)
@@ -31,12 +36,15 @@ fun Song.toMediaItem(): MediaItem {
                     Bundle().apply {
                         putLong(EXTRA_DURATION, durationSec)
                         putString(EXTRA_ARTIST_URL, artistUrl)
+                        putBoolean(EXTRA_RADIO, radio)
                     }
                 )
                 .build()
         )
         .build()
 }
+
+fun MediaItem.isRadio(): Boolean = mediaMetadata.extras?.getBoolean(EXTRA_RADIO, false) == true
 
 fun MediaItem.toSong(): Song = knownSongs[mediaId] ?: Song(
     id = mediaId,

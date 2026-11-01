@@ -37,6 +37,9 @@ jobs:
           TUNEHUB_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease
 
+      - name: Unit tests
+        run: gradle testReleaseUnitTest --tests "com.tunehub.app.unit.*"
+
       - name: Free disk space for the emulator
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost

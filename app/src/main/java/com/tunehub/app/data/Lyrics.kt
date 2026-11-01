@@ -5,7 +5,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.ConcurrentHashMap
+import java.io.IOException
 import kotlin.math.abs
 
 /** Lyrics from LRCLIB (lrclib.net), a free, keyless lyrics database with time-synced lines. */
@@ -29,27 +29,25 @@ object Lyrics {
     )
 
     private val json = Json { ignoreUnknownKeys = true }
-    private val cache = ConcurrentHashMap<String, Result>()
-    private val misses = ConcurrentHashMap.newKeySet<String>()
+    private val cache = BoundedCache<String, Result>(200)
 
-    /** Blocking. Returns null when nothing was found. */
+    // confirmed "no lyrics" answers, remembered for a while; network errors are never remembered
+    private val misses = BoundedCache<String, Long>(500)
+
+    /**
+     * Blocking. Returns null when LRCLIB has no matching lyrics; throws [IOException] when it
+     * couldn't be reached, so the caller can offer a retry.
+     */
     fun find(client: OkHttpClient, song: Song): Result? {
         cache[song.id]?.let { return it }
-        if (song.id in misses) return null
+        misses[song.id]?.let { if (System.currentTimeMillis() - it < MISS_TTL_MS) return null }
 
         val title = cleanTitle(song.title, song.artist)
-        val candidates = search(client, title, song.artist).ifEmpty { search(client, title, null) }
-        // prefer synced lyrics whose length matches the song; YouTube durations run a few seconds long
-        val best = candidates
-            .filter { !it.instrumental && (it.syncedLyrics != null || it.plainLyrics != null) }
-            .sortedWith(
-                compareBy<Track> { if (it.syncedLyrics != null) 0 else 1 }
-                    .thenBy { abs((it.duration ?: 0.0) - song.durationSec) }
-            )
-            .firstOrNull { song.durationSec <= 0 || abs((it.duration ?: 0.0) - song.durationSec) < 15 }
+        val best = pickBest(search(client, title, song.artist), title, song.durationSec)
+            ?: pickBest(search(client, title, null), title, song.durationSec)
 
         if (best == null) {
-            misses += song.id
+            misses[song.id] = System.currentTimeMillis()
             return null
         }
         val result = Result(
@@ -60,6 +58,25 @@ object Lyrics {
         return result
     }
 
+    // usable, same title, then synced and closest in length; YouTube durations run a few seconds long
+    private fun pickBest(candidates: List<Track>, title: String, durationSec: Long): Track? = candidates
+        .filter { !it.instrumental && (it.syncedLyrics != null || it.plainLyrics != null) }
+        .filter { titlesMatch(title, it.trackName.orEmpty()) }
+        .sortedWith(
+            compareBy<Track> { if (it.syncedLyrics != null) 0 else 1 }
+                .thenBy { abs((it.duration ?: 0.0) - durationSec) }
+        )
+        .firstOrNull { durationSec <= 0 || abs((it.duration ?: 0.0) - durationSec) < 15 }
+
+    /** Loose title comparison: case, punctuation and bracketed extras don't matter. */
+    internal fun titlesMatch(a: String, b: String): Boolean {
+        fun norm(s: String) = s.lowercase().replace(Regex("""\(.*?\)|\[.*?]"""), "")
+            .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim()
+        val x = norm(a)
+        val y = norm(b)
+        return x.isNotEmpty() && y.isNotEmpty() && (x == y || x.contains(y) || y.contains(x))
+    }
+
     private fun search(client: OkHttpClient, title: String, artist: String?): List<Track> {
         val url = "https://lrclib.net/api/search".toHttpUrl().newBuilder()
             .addQueryParameter("track_name", title)
@@ -67,7 +84,7 @@ object Lyrics {
             .build()
         val request = Request.Builder().url(url).header("User-Agent", "TuneHub (personal music player)").build()
         return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return emptyList()
+            if (!response.isSuccessful) throw IOException("LRCLIB HTTP ${response.code}")
             json.decodeFromString<List<Track>>(response.body?.string() ?: return emptyList())
         }
     }
@@ -82,7 +99,7 @@ object Lyrics {
         return t.replace(Regex("""\s+"""), " ").trim(' ', '-', '|').ifBlank { title }
     }
 
-    private fun parseLrc(lrc: String): List<Line> {
+    internal fun parseLrc(lrc: String): List<Line> {
         val tag = Regex("""\[(\d+):(\d+(?:\.\d+)?)]""")
         return lrc.lines().flatMap { raw ->
             val stamps = tag.findAll(raw).toList()
@@ -94,4 +111,6 @@ object Lyrics {
             }
         }.sortedBy { it.timeMs }
     }
+
+    private const val MISS_TTL_MS = 30 * 60_000L
 }

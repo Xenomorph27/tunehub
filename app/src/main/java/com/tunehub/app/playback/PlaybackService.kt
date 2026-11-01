@@ -18,6 +18,7 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -31,6 +32,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.StreamResolver
+import com.tunehub.app.data.isValidVideoId
 import com.tunehub.app.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,24 +60,27 @@ class PlaybackService : MediaSessionService() {
 
     private var retriedId: String? = null
     private var radioSeedId: String? = null
+    private var failuresInARow = 0
+    private var announcedSessionId = C.AUDIO_SESSION_ID_UNSET
+
+    /** Bumped whenever the queue is replaced, so slow radio lookups for an old queue are dropped. */
+    private var queueGeneration = 0
 
     override fun onCreate() {
         super.onCreate()
 
-        // the app's OkHttp client: its warm HTTP/2 connections to googlevideo make songs start faster
-        val http = OkHttpDataSource.Factory(TuneHubApp.http)
-        // DefaultDataSource also reads file:// URIs, which is how downloaded songs play
-        val resolving = ResolvingDataSource.Factory(DefaultDataSource.Factory(this, http)) { spec -> resolve(spec) }
-        // cache keyed by the stable tunehub:// URI, so replays and seeks skip the network
+        // The stream is resolved first, so the cache key names the exact audio file (rendition);
+        // downloaded songs come back as file:// and skip the streaming cache entirely.
+        // The app's OkHttp client keeps warm HTTP/2 connections to googlevideo.
         val cached = CacheDataSource.Factory()
             .setCache(cache(this))
-            // hi-res and data-saver streams of one song must never mix in the cache
-            .setCacheKeyFactory { spec -> spec.uri.toString() + if (StreamResolver.dataSaver) "#lo" else "#hi" }
-            .setUpstreamDataSourceFactory(resolving)
+            .setUpstreamDataSourceFactory(OkHttpDataSource.Factory(TuneHubApp.http))
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        val routed = DefaultDataSource.Factory(this, cached)
+        val resolving = ResolvingDataSource.Factory(routed) { spec -> resolve(spec) }
 
         exo = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(cached))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(resolving))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -94,11 +99,12 @@ class PlaybackService : MediaSessionService() {
             .build()
         exo.addListener(listener)
         player = exo
-        announceAudioSession(true)
-        AudioFx.attach(exo.audioSessionId)
+        onAudioSession(exo.audioSessionId)
         scope.launch {
             TuneHubApp.library.data.map { it.eq }.distinctUntilChanged().collect { AudioFx.apply(it) }
         }
+        // the cache before rendition-keyed entries; its keys can't be trusted any more
+        scope.launch(Dispatchers.IO) { File(cacheDir, "media").deleteRecursively() }
 
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
@@ -121,7 +127,7 @@ class PlaybackService : MediaSessionService() {
         scope.cancel()
         AudioFx.release()
         SleepTimer.cancel()
-        announceAudioSession(false)
+        announce(announcedSessionId, open = false)
         player = null
         session?.run {
             exo.release()
@@ -131,25 +137,35 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
-    // Lets system / third-party equalizers attach to our audio
-    private fun announceAudioSession(open: Boolean) {
-        val action = if (open) {
-            AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION
-        } else {
-            AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION
+    /** Effects and external equalizers follow the player's real audio session. */
+    private fun onAudioSession(sessionId: Int) {
+        if (sessionId == announcedSessionId) return
+        announce(announcedSessionId, open = false)
+        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+            announce(sessionId, open = true)
+            AudioFx.attach(sessionId)
         }
-        sendBroadcast(
-            Intent(action)
-                .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, exo.audioSessionId)
-                .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
-                .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
-        )
+        announcedSessionId = sessionId
+    }
+
+    // Lets system / third-party equalizers attach to our audio
+    private fun announce(sessionId: Int, open: Boolean) {
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET) return
+        val action = if (open) AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION else AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION
+        runCatching {
+            sendBroadcast(
+                Intent(action)
+                    .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+                    .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+                    .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+            )
+        }
     }
 
     /** Runs on ExoPlayer's loader thread, so the blocking lookup is fine here. */
     private fun resolve(spec: DataSpec): DataSpec {
         if (spec.uri.scheme != SONG_SCHEME) return spec
-        val id = spec.uri.lastPathSegment ?: return spec
+        val id = spec.uri.lastPathSegment?.takeIf(::isValidVideoId) ?: throw IOException("Invalid song")
 
         TuneHubApp.downloads.fileFor(id)?.let { return spec.buildUpon().setUri(Uri.fromFile(it)).build() }
 
@@ -166,30 +182,35 @@ class PlaybackService : MediaSessionService() {
             .setHttpMethod(DataSpec.HTTP_METHOD_POST)
             .setHttpBody(POST_BODY)
             .setHttpRequestHeaders(spec.httpRequestHeaders + stream.headers)
+            .setKey("$CACHE_KEY_VERSION:$id:${stream.rendition}")
             .build()
     }
 
     private val callback = object : MediaSession.Callback {
-        // Items from the UI arrive without their URI, so rebuild it from the media id
+        // Items from controllers arrive without their URI: rebuild it from a validated media id
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> = Futures.immediateFuture(
-            mediaItems.map { it.buildUpon().setUri(songUri(it.mediaId)).build() }.toMutableList()
+            mediaItems.filter { isValidVideoId(it.mediaId) }
+                .map { it.buildUpon().setUri(songUri(it.mediaId)).build() }
+                .toMutableList()
         )
     }
 
     private val listener = object : Player.Listener {
-        override fun onAudioSessionIdChanged(audioSessionId: Int) {
-            AudioFx.attach(audioSessionId)
-        }
+        override fun onAudioSessionIdChanged(audioSessionId: Int) = onAudioSession(audioSessionId)
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             mediaItem ?: return
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) radioSeedId = null
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
+                queueGeneration++
+                radioSeedId = null
+            }
+            if (mediaItem.mediaId != retriedId) retriedId = null
             TuneHubApp.library.addRecent(mediaItem.toSong())
-            retriedId = null
+            trimPlayedHistory()
             prefetchNext()
             extendQueueIfNeeded()
         }
@@ -198,30 +219,106 @@ class PlaybackService : MediaSessionService() {
             extendQueueIfNeeded()
         }
 
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) failuresInARow = 0
+        }
+
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) SleepTimer.onSongEndPause()
         }
 
-        override fun onPlayerError(error: PlaybackException) {
-            val id = exo.currentMediaItem?.mediaId ?: return
-            if (error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
-            ) {
-                // offline: don't burn through the queue, just wait for the user to hit play again
-                Toast.makeText(this@PlaybackService, "No connection", Toast.LENGTH_SHORT).show()
-                return
+        override fun onPlayerError(error: PlaybackException) = handleError(error)
+    }
+
+    private fun handleError(error: PlaybackException) {
+        val id = exo.currentMediaItem?.mediaId ?: return
+        failuresInARow++
+
+        // offline, rate-limited or YouTube having a bad moment: wait instead of burning through the queue
+        if (isTemporaryOutage(error)) {
+            toast(if (isNetworkDown(error)) "No connection" else "YouTube isn't responding. Try again in a moment")
+            return
+        }
+        if (failuresInARow >= MAX_FAILURES_IN_A_ROW) {
+            exo.pause()
+            toast("Playback keeps failing. Check your connection, then press play")
+            failuresInARow = 0
+            return
+        }
+        if (retriedId != id) {
+            // most often an expired or bad stream: look it up again and rebuild the source,
+            // so a different rendition never reuses the old one's parser state
+            retriedId = id
+            StreamResolver.invalidate(id)
+            reloadQueue(exo, resume = true)
+            return
+        }
+        val title = exo.currentMediaItem?.mediaMetadata?.title ?: "song"
+        toast("Couldn't play $title")
+        if (exo.hasNextMediaItem()) {
+            exo.seekToNextMediaItem()
+            exo.prepare()
+            exo.play()
+        }
+    }
+
+    private fun isNetworkDown(error: PlaybackException) =
+        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+            error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+
+    private fun isTemporaryOutage(error: PlaybackException): Boolean {
+        if (isNetworkDown(error)) return true
+        val http = generateSequence(error.cause) { it.cause }
+            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
+        return http != null && (http.responseCode == 429 || http.responseCode >= 500)
+    }
+
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+
+    /** Resolve the next song's stream early so skipping is instant. */
+    private fun prefetchNext() {
+        val next = exo.nextMediaItemIndex.takeIf { it != C.INDEX_UNSET } ?: return
+        val id = exo.getMediaItemAt(next).mediaId
+        if (TuneHubApp.downloads.fileFor(id) != null) return
+        StreamResolver.prefetch(id)
+    }
+
+    /** Keeps at most [HISTORY_KEPT] already-played songs in the queue so long sessions stay light. */
+    private fun trimPlayedHistory() {
+        val index = exo.currentMediaItemIndex
+        if (index > HISTORY_KEPT + 10) exo.removeMediaItems(0, index - HISTORY_KEPT)
+    }
+
+    /**
+     * Radio and autoplay: when the queue is about to run out, append songs related to the current
+     * one. Runs for every queue when autoplay is on, and for "song radio" queues always. The
+     * result is only used if the queue it was fetched for is still the one playing.
+     */
+    private fun extendQueueIfNeeded() {
+        if (exo.repeatMode != Player.REPEAT_MODE_OFF || exo.mediaItemCount == 0) return
+        if (exo.currentMediaItemIndex < exo.mediaItemCount - 2) return
+        if (!radioWanted()) return
+        val seed = exo.currentMediaItem?.mediaId ?: return
+        if (seed == radioSeedId) return
+        radioSeedId = seed
+        val generation = queueGeneration
+
+        scope.launch {
+            val related = withContext(Dispatchers.IO) {
+                runCatching { StreamResolver.related(seed) }.getOrDefault(emptyList())
             }
-            if (retriedId != id) {
-                // most often an expired stream URL: fetch a fresh one and resume where we were
-                retriedId = id
-                StreamResolver.invalidate(id)
-                exo.prepare()
-                exo.play()
-                return
-            }
-            val title = exo.currentMediaItem?.mediaMetadata?.title ?: "song"
-            Toast.makeText(this@PlaybackService, "Couldn't play $title", Toast.LENGTH_SHORT).show()
-            if (exo.hasNextMediaItem()) {
+            val stillValid = generation == queueGeneration &&
+                exo.currentMediaItem?.mediaId == seed &&
+                exo.repeatMode == Player.REPEAT_MODE_OFF &&
+                radioWanted()
+            if (!stillValid) return@launch
+            val queued = (0 until exo.mediaItemCount).map { exo.getMediaItemAt(it).mediaId }.toSet()
+            val additions = related.filter { it.id !in queued }.take(RADIO_BATCH)
+            if (additions.isEmpty()) return@launch
+            val endedWhileWaiting = exo.playbackState == Player.STATE_ENDED && exo.playWhenReady
+            exo.addMediaItems(additions.map { it.toMediaItem() })
+            // the last song finished before the related songs arrived: carry on, as the user expects
+            if (endedWhileWaiting) {
                 exo.seekToNextMediaItem()
                 exo.prepare()
                 exo.play()
@@ -229,36 +326,15 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** Resolve the next song's stream early so skipping is instant. */
-    private fun prefetchNext() {
-        val next = exo.nextMediaItemIndex.takeIf { it != C.INDEX_UNSET } ?: return
-        val id = exo.getMediaItemAt(next).mediaId
-        if (TuneHubApp.downloads.fileFor(id) != null) return
-        scope.launch(Dispatchers.IO) { runCatching { StreamResolver.resolve(id) } }
-    }
-
-    /** Autoplay: when the queue is about to run out, append songs related to the current one. */
-    private fun extendQueueIfNeeded() {
-        if (!TuneHubApp.library.data.value.autoplay) return
-        if (exo.repeatMode != Player.REPEAT_MODE_OFF || exo.mediaItemCount == 0) return
-        if (exo.currentMediaItemIndex < exo.mediaItemCount - 2) return
-        val seed = exo.currentMediaItem?.mediaId ?: return
-        if (seed == radioSeedId) return
-        radioSeedId = seed
-
-        scope.launch {
-            val related = withContext(Dispatchers.IO) {
-                runCatching { StreamResolver.related(seed) }.getOrDefault(emptyList())
-            }
-            val queued = (0 until exo.mediaItemCount).map { exo.getMediaItemAt(it).mediaId }.toSet()
-            val additions = related.filter { it.id !in queued }.take(RADIO_BATCH)
-            exo.addMediaItems(additions.map { it.toMediaItem() })
-        }
-    }
+    private fun radioWanted() =
+        TuneHubApp.library.data.value.autoplay || (exo.mediaItemCount > 0 && exo.getMediaItemAt(0).isRadio())
 
     companion object {
         private val POST_BODY = byteArrayOf(0x78, 0)
         private const val RADIO_BATCH = 10
+        private const val HISTORY_KEPT = 50
+        private const val MAX_FAILURES_IN_A_ROW = 3
+        private const val CACHE_KEY_VERSION = "v2"
         private const val CACHE_BYTES = 512L * 1024 * 1024
 
         /** The live player, for the sleep timer and equalizer. Null when the service isn't running. */
@@ -270,7 +346,7 @@ class PlaybackService : MediaSessionService() {
         // SimpleCache allows one instance per folder per process, and the service can be recreated
         @Synchronized
         private fun cache(context: Context): SimpleCache = sharedCache ?: SimpleCache(
-            File(context.cacheDir, "media"),
+            File(context.cacheDir, "media2"),
             LeastRecentlyUsedCacheEvictor(CACHE_BYTES),
             StandaloneDatabaseProvider(context),
         ).also { sharedCache = it }
@@ -280,14 +356,18 @@ class PlaybackService : MediaSessionService() {
         /** Reloads the queue at the same spot, e.g. so a quality switch takes effect right away. */
         fun reloadCurrent() {
             val p = player ?: return
+            reloadQueue(p, resume = p.playWhenReady)
+        }
+
+        // a fresh media source for the current song, at the same position
+        private fun reloadQueue(p: ExoPlayer, resume: Boolean) {
             if (p.mediaItemCount == 0) return
             val items = (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }
             val index = p.currentMediaItemIndex
             val position = p.currentPosition
-            val playWhenReady = p.playWhenReady
             p.setMediaItems(items, index, position)
             p.prepare()
-            p.playWhenReady = playWhenReady
+            p.playWhenReady = resume
         }
     }
 }

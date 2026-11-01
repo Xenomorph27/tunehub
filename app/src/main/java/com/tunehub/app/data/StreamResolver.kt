@@ -16,7 +16,7 @@ import org.schabi.newpipe.extractor.stream.AudioTrackType
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Turns a video id into a direct googlevideo.com audio URL plus the headers YouTube
@@ -30,71 +30,116 @@ object StreamResolver {
         val expiresAtMs: Long,
         /** e.g. "OPUS 160K", for the Now Playing quality badge. */
         val quality: String,
+        /**
+         * Which exact audio file this is (format itag + DRC flag). Part of the media cache key,
+         * so bytes of one rendition are never served as another.
+         */
+        val rendition: String,
         val fast: Boolean = false,
     )
 
-    private class Candidate(val url: String, val kbps: Int, val opus: Boolean, val m4a: Boolean)
+    private class Candidate(
+        val url: String,
+        val kbps: Int,
+        val opus: Boolean,
+        val m4a: Boolean,
+        val itag: Int,
+        val drc: Boolean,
+    )
 
-    private val cache = ConcurrentHashMap<String, Resolved>()
-    private val locks = ConcurrentHashMap<String, Any>()
-    private val relatedCache = ConcurrentHashMap<String, List<Song>>()
+    // keyed by "<id>|hi" or "<id>|lo": each quality has its own entry, so a slow lookup started
+    // before a quality switch can only ever publish into its own slot
+    private val cache = BoundedCache<String, Resolved>(300)
+    private val locks = BoundedCache<String, Any>(300)
+    private val relatedCache = BoundedCache<String, List<Song>>(100)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // songs whose fast-path stream failed to play, and how often that happened: after a couple of
-    // failures the fast path is skipped for the rest of the session
-    private val fullOnly = ConcurrentHashMap.newKeySet<String>()
+    // Fast-path health. Songs whose fast stream failed to play use the full extractor; after a
+    // couple of those, or a run of failed fast lookups, the fast path rests for a while.
+    private val fullOnly = BoundedCache<String, Boolean>(500)
+    private val fastPlaybackFailures = AtomicInteger()
+    private val fastLookupFailuresInARow = AtomicInteger()
     @Volatile
-    private var fastFailures = 0
+    private var fastPausedUntilMs = 0L
 
     /** Picks the lowest-bitrate stream instead of the highest. Set from the app's settings. */
     @Volatile
     var dataSaver = false
-        set(value) {
-            if (field != value) cache.clear()
-            field = value
-        }
 
-    /** The cached stream for a song, if it was resolved recently. Never blocks. */
-    fun peek(videoId: String): Resolved? =
-        cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }
+    private fun key(videoId: String, saver: Boolean) = videoId + if (saver) "|lo" else "|hi"
+
+    /** The cached stream for a song at the current quality, if resolved recently. Never blocks. */
+    fun peek(videoId: String): Resolved? = peek(videoId, dataSaver)
+
+    private fun peek(videoId: String, saver: Boolean): Resolved? =
+        cache[key(videoId, saver)]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }
 
     /** Starts resolving in the background, e.g. the moment a finger touches a song. */
     fun prefetch(videoId: String) {
-        if (peek(videoId) != null) return
+        if (!isValidVideoId(videoId) || peek(videoId) != null) return
         scope.launch { runCatching { resolve(videoId) } }
     }
 
-    /** Blocking network call. Concurrent calls for one song share a single lookup. */
+    /**
+     * Blocking network call. The quality is read once, at the start, and the whole lookup uses
+     * that snapshot. Concurrent calls for one song and quality share a single lookup.
+     */
     fun resolve(videoId: String): Resolved {
-        peek(videoId)?.let { return it }
-        synchronized(locks.getOrPut(videoId) { Any() }) {
-            peek(videoId)?.let { return it }
-            // one player request is enough to start playing; the full extractor makes four
-            val useFast = fastFailures < 2 && videoId !in fullOnly
-            val resolved = (if (useFast) runCatching { fetchFast(videoId) }.getOrNull() else null) ?: fetchFull(videoId)
-            cache[videoId] = resolved
+        if (!isValidVideoId(videoId)) throw IOException("Invalid video id")
+        val saver = dataSaver
+        peek(videoId, saver)?.let { return it }
+        val k = key(videoId, saver)
+        synchronized(locks.getOrPut(k) { Any() }) {
+            peek(videoId, saver)?.let { return it }
+            val resolved = (if (fastPathAllowed(videoId)) fetchFastOrNull(videoId, saver) else null)
+                ?: fetchFull(videoId, saver)
+            cache[k] = resolved
             return resolved
         }
     }
 
-    /** Songs YouTube relates to this one (for radio and autoplay). Blocking; cached. */
+    /** Songs YouTube relates to this one (for radio and autoplay). Blocking; cached; shared in flight. */
     fun related(videoId: String): List<Song> {
+        if (!isValidVideoId(videoId)) return emptyList()
         relatedCache[videoId]?.let { return it }
-        val info = YouTube.streamInfo(videoId)
-        val related = info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.toSong() }.filter { it.id != videoId }
-        relatedCache[videoId] = related
-        return related
+        synchronized(locks.getOrPut("rel|$videoId") { Any() }) {
+            relatedCache[videoId]?.let { return it }
+            val info = YouTube.streamInfo(videoId)
+            val related = info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.toSong() }.filter { it.id != videoId }
+            relatedCache[videoId] = related
+            return related
+        }
     }
 
-    /** Drops a stream that failed to play; the retry uses the full extractor. */
+    /** Drops a stream that failed to play (both qualities); the retry uses the full extractor. */
     fun invalidate(videoId: String) {
-        val failed = cache.remove(videoId)
-        if (failed != null && failed.fast && fullOnly.add(videoId)) fastFailures++
+        val failed = listOfNotNull(cache.remove(key(videoId, false)), cache.remove(key(videoId, true)))
+        if (failed.any { it.fast } && fullOnly[videoId] == null) {
+            fullOnly[videoId] = true
+            if (fastPlaybackFailures.incrementAndGet() >= 2) pauseFastPath()
+        }
+    }
+
+    private fun fastPathAllowed(videoId: String) =
+        fullOnly[videoId] == null && System.currentTimeMillis() >= fastPausedUntilMs
+
+    private fun pauseFastPath() {
+        fastPausedUntilMs = System.currentTimeMillis() + FAST_PATH_PAUSE_MS
+        fastPlaybackFailures.set(0)
+        fastLookupFailuresInARow.set(0)
     }
 
     // ---------------------------------------------------------------- fast path
 
-    private fun fetchFast(videoId: String): Resolved {
+    private fun fetchFastOrNull(videoId: String, saver: Boolean): Resolved? = try {
+        fetchFast(videoId, saver).also { fastLookupFailuresInARow.set(0) }
+    } catch (e: Exception) {
+        // if the fast lookup itself keeps failing (YouTube changed something), stop paying for it
+        if (fastLookupFailuresInARow.incrementAndGet() >= 3) pauseFastPath()
+        null
+    }
+
+    private fun fetchFast(videoId: String, saver: Boolean): Resolved {
         val cpn = YoutubeParsingHelper.generateContentPlaybackNonce()
         val response = YoutubeStreamHelper.getAndroidReelPlayerResponse(
             NewPipe.getPreferredContentCountry(), NewPipe.getPreferredLocalization(), videoId, cpn,
@@ -108,10 +153,11 @@ object StreamResolver {
             .filter { it.getString("mimeType", "").startsWith("audio/") && it.has("url") }
             // the default language track, and not YouTube's dynamic-range-compressed copy
             .filter { !it.has("audioTrack") || it.getObject("audioTrack").getBoolean("audioIsDefault", true) }
-        val candidates = audio.filterNot { it.getBoolean("isDrc", false) }.ifEmpty { audio }
-            .map { candidate(videoId, it, cpn) }
-        val best = pick(candidates) ?: throw IOException("No audio formats")
-        return Resolved(best.url, headersFor(best.url), expiryOf(best.url), qualityLabel(best), fast = true)
+        val preferred = audio.filterNot { it.getBoolean("isDrc", false) }.ifEmpty { audio }
+        // one malformed format shouldn't sink the others
+        val candidates = preferred.mapNotNull { runCatching { candidate(videoId, it, cpn) }.getOrNull() }
+        val best = pick(candidates, saver) ?: throw IOException("No audio formats")
+        return resolved(best, fast = true)
     }
 
     private fun candidate(videoId: String, format: JsonObject, cpn: String): Candidate {
@@ -119,12 +165,15 @@ object StreamResolver {
         val url = YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, format.getString("url")) +
             "&" + YoutubeParsingHelper.CPN + "=" + cpn
         val bitrate = maxOf(format.getInt("averageBitrate", 0), format.getInt("bitrate", 0))
-        return Candidate(url, bitrate / 1000, mime.contains("opus"), mime.startsWith("audio/mp4"))
+        return Candidate(
+            url, bitrate / 1000, mime.contains("opus"), mime.startsWith("audio/mp4"),
+            itag = format.getInt("itag", 0), drc = format.getBoolean("isDrc", false),
+        )
     }
 
     // ---------------------------------------------------------------- full extractor (fallback)
 
-    private fun fetchFull(videoId: String): Resolved {
+    private fun fetchFull(videoId: String, saver: Boolean): Resolved {
         val info = YouTube.streamInfo(videoId)
         relatedCache[videoId] = info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.toSong() }.filter { it.id != videoId }
         val progressive = info.audioStreams.filter {
@@ -140,10 +189,12 @@ object StreamResolver {
                 maxOf(it.averageBitrate, it.bitrate) / 1000,
                 it.codec?.contains("opus", ignoreCase = true) == true,
                 it.format == MediaFormat.M4A,
+                itag = it.itag,
+                drc = isDrc(it),
             )
         }
-        val best = pick(candidates) ?: throw IOException("No playable audio stream for $videoId")
-        return Resolved(best.url, headersFor(best.url), expiryOf(best.url), qualityLabel(best))
+        val best = pick(candidates, saver) ?: throw IOException("No playable audio stream for $videoId")
+        return resolved(best, fast = false)
     }
 
     private fun isDrc(stream: AudioStream) =
@@ -151,11 +202,23 @@ object StreamResolver {
 
     // ---------------------------------------------------------------- shared
 
+    private fun resolved(c: Candidate, fast: Boolean) = Resolved(
+        url = c.url,
+        headers = headersFor(c.url),
+        expiresAtMs = expiryOf(c.url),
+        quality = qualityLabel(c),
+        rendition = "${c.itag}${if (c.drc) "d" else ""}",
+        fast = fast,
+    )
+
     /** Highest bitrate (Opus wins ties), or the lowest in data-saver mode. */
-    private fun pick(candidates: List<Candidate>): Candidate? {
-        val order = compareBy<Candidate>({ it.kbps }, { if (it.opus) 1 else 0 })
-        return if (dataSaver) candidates.minWithOrNull(order) else candidates.maxWithOrNull(order)
+    internal fun <T> pickBest(items: List<T>, saver: Boolean, kbps: (T) -> Int, opus: (T) -> Boolean): T? {
+        val order = compareBy<T>({ kbps(it) }, { if (opus(it)) 1 else 0 })
+        return if (saver) items.minWithOrNull(order) else items.maxWithOrNull(order)
     }
+
+    private fun pick(candidates: List<Candidate>, saver: Boolean): Candidate? =
+        pickBest(candidates, saver, { it.kbps }, { it.opus })
 
     private fun qualityLabel(c: Candidate): String {
         val codec = when {
@@ -189,4 +252,6 @@ object StreamResolver {
         val now = System.currentTimeMillis()
         return if (expireSec != null) expireSec * 1000 - 5 * 60_000 else now + 3 * 3600_000
     }
+
+    private const val FAST_PATH_PAUSE_MS = 10 * 60_000L
 }

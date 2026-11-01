@@ -17,11 +17,6 @@ import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.Song
 import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.playback.PlaybackService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import com.tunehub.app.playback.toMediaItem
 import com.tunehub.app.playback.toSong
 
@@ -47,40 +42,73 @@ object PlayerConnection {
         private set
     var error by mutableStateOf<String?>(null)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var appContext: Context? = null
+    private var started = false
     private var future: ListenableFuture<MediaController>? = null
-    private var pending: ((MediaController) -> Unit)? = null
 
+    // commands issued before the controller connects, run in order once it does
+    private val pending = ArrayDeque<(MediaController) -> Unit>()
+
+    /** Call from the Activity's onStart; reconnects by itself if the connection drops while started. */
     fun connect(context: Context) {
-        if (future != null) return
-        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val f = MediaController.Builder(context, token).buildAsync()
-        future = f
-        f.addListener({
-            val c = runCatching { f.get() }.getOrNull() ?: return@addListener
-            c.addListener(listener)
-            controller = c
-            sync(c)
-            pending?.invoke(c)
-            pending = null
-        }, ContextCompat.getMainExecutor(context))
+        appContext = context.applicationContext
+        started = true
+        ensureConnected()
     }
 
+    /** Call from the Activity's onStop. */
     fun disconnect() {
+        started = false
         future?.let(MediaController::releaseFuture)
         future = null
         controller = null
     }
 
+    private fun ensureConnected() {
+        val context = appContext ?: return
+        if (!started || future != null) return
+        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        val f = MediaController.Builder(context, token)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    if (this@PlayerConnection.controller === controller) {
+                        this@PlayerConnection.controller = null
+                        future = null
+                        ensureConnected()
+                    }
+                }
+            })
+            .buildAsync()
+        future = f
+        f.addListener({
+            // a newer connect/disconnect happened while this one was in flight
+            if (future !== f) {
+                MediaController.releaseFuture(f)
+                return@addListener
+            }
+            val c = runCatching { f.get() }.getOrNull()
+            if (c == null) {
+                future = null
+                error = "Couldn't connect to the player"
+                return@addListener
+            }
+            c.addListener(listener)
+            controller = c
+            sync(c, timelineChanged = true)
+            while (pending.isNotEmpty()) pending.removeFirst().invoke(c)
+        }, ContextCompat.getMainExecutor(context))
+    }
+
     private val listener = object : Player.Listener {
-        override fun onEvents(player: Player, events: Player.Events) = sync(player)
+        override fun onEvents(player: Player, events: Player.Events) =
+            sync(player, timelineChanged = events.contains(Player.EVENT_TIMELINE_CHANGED))
 
         override fun onPlayerError(error: PlaybackException) {
             this@PlayerConnection.error = error.message
         }
     }
 
-    private fun sync(p: Player) {
+    private fun sync(p: Player, timelineChanged: Boolean) {
         current = p.currentMediaItem?.toSong()
         isPlaying = p.isPlaying
         isBuffering = p.playbackState == Player.STATE_BUFFERING
@@ -88,19 +116,31 @@ object PlayerConnection {
         shuffle = p.shuffleModeEnabled
         repeatMode = p.repeatMode
         index = p.currentMediaItemIndex
-        queue = (0 until p.mediaItemCount).map { p.getMediaItemAt(it).toSong() }
+        // rebuilding the whole queue on every position or play/pause event is wasted work
+        if (timelineChanged) queue = (0 until p.mediaItemCount).map { p.getMediaItemAt(it).toSong() }
     }
 
-    // Runs now if connected, otherwise as soon as the controller is ready
-    private fun withController(action: (MediaController) -> Unit) {
-        controller?.let(action) ?: run { pending = action }
+    /**
+     * Runs now if connected, otherwise once the controller is ready. A command that replaces the
+     * queue ([replaces]) drops pending ones, since they'd apply to a queue that's about to go.
+     */
+    private fun withController(replaces: Boolean = false, action: (MediaController) -> Unit) {
+        val c = controller
+        if (c != null) {
+            action(c)
+            return
+        }
+        if (replaces) pending.clear()
+        pending.addLast(action)
+        ensureConnected()
     }
 
-    fun play(songs: List<Song>, startIndex: Int = 0, shuffled: Boolean = false) {
+    fun play(songs: List<Song>, startIndex: Int = 0, shuffled: Boolean = false, radio: Boolean = false) {
         if (songs.isEmpty()) return
-        withController { c ->
+        val items = songs.mapIndexed { i, song -> song.toMediaItem(radio = radio && i == 0) }
+        withController(replaces = true) { c ->
             c.shuffleModeEnabled = shuffled
-            c.setMediaItems(songs.map { it.toMediaItem() }, startIndex, 0)
+            c.setMediaItems(items, startIndex, 0)
             c.prepare()
             c.play()
         }
@@ -128,19 +168,11 @@ object PlayerConnection {
         }
     }
 
-    /** Plays the song now, then queues songs YouTube relates to it. */
-    fun startRadio(song: Song) {
-        play(listOf(song))
-        scope.launch {
-            val related = withContext(Dispatchers.IO) {
-                runCatching { StreamResolver.related(song.id) }.getOrDefault(emptyList())
-            }
-            withController { c ->
-                val queued = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
-                c.addMediaItems(related.filter { it.id !in queued }.take(25).map { it.toMediaItem() })
-            }
-        }
-    }
+    /**
+     * Plays the song now as the seed of a radio: the playback service keeps the queue going with
+     * related songs (it owns radio, so a stale lookup can never land on a newer queue).
+     */
+    fun startRadio(song: Song) = play(listOf(song), radio = true)
 
     fun clearUpcoming() = withController { c ->
         val from = c.currentMediaItemIndex + 1

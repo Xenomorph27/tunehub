@@ -42,7 +42,7 @@ class TuneHubApp : Application(), ImageLoaderFactory {
             Localization.fromLocale(locale),
             ContentCountry(locale.country.ifEmpty { "US" }),
         )
-        library = Library(this)
+        library = Library(filesDir)
         downloads = Downloads(this, http, library)
 
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {

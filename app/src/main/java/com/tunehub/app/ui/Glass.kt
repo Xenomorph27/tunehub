@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +40,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
@@ -190,31 +195,42 @@ fun WaveformSeekBar(
             wave.coerceIn(0.18f, 1f)
         }
     }
-    var dragFraction by remember { mutableStateOf<Float?>(null) }
+    // the gesture handlers live across recompositions: always call the latest callbacks
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentOnPreview by rememberUpdatedState(onSeekPreview)
+    var dragFraction by remember(seed) { mutableStateOf<Float?>(null) }
     val shown = dragFraction ?: progress
 
     Canvas(
         modifier
-            .semantics { contentDescription = "Seek bar" }
-            .pointerInput(Unit) {
-                detectTapGestures { offset -> onSeek((offset.x / size.width).coerceIn(0f, 1f)) }
+            .semantics {
+                contentDescription = "Seek bar"
+                progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f)
+                stateDescription = "${(progress * 100).toInt()}%"
+                setProgress { target ->
+                    currentOnSeek(target.coerceIn(0f, 1f))
+                    true
+                }
             }
-            .pointerInput(Unit) {
+            .pointerInput(seed) {
+                detectTapGestures { offset -> currentOnSeek((offset.x / size.width).coerceIn(0f, 1f)) }
+            }
+            .pointerInput(seed) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
-                        dragFraction?.let(onSeek)
+                        dragFraction?.let(currentOnSeek)
                         dragFraction = null
-                        onSeekPreview(null)
+                        currentOnPreview(null)
                     },
                     onDragCancel = {
                         dragFraction = null
-                        onSeekPreview(null)
+                        currentOnPreview(null)
                     },
                 ) { change, _ ->
                     change.consume()
                     val f = (change.position.x / size.width).coerceIn(0f, 1f)
                     dragFraction = f
-                    onSeekPreview(f)
+                    currentOnPreview(f)
                 }
             },
     ) {

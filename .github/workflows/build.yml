@@ -8,9 +8,15 @@ on:
 permissions:
   contents: write
 
+# queue builds instead of cancelling one halfway through publishing
 concurrency:
   group: build
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+env:
+  # SHA-256 of the certificate every published TuneHub APK is signed with. A build signed with
+  # anything else could not update existing installs, so it must never be published.
+  RELEASE_CERT_SHA256: 81c410657500b1baaa34c033b39e0a30d0f2adc053e1fcd75354848c415eb2c4
 
 jobs:
   build:
@@ -27,20 +33,35 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      # numbering continues from the "TuneHub build 27" release; the offset keeps version codes rising
+      # Version codes must always rise, or phones refuse the update. Numbering continues from the
+      # "TuneHub build 27" release; the guard below also checks against the newest published build.
       - name: Set build number
-        run: echo "BUILD_NUMBER=$(( ${{ github.run_number }} + 15 ))" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 15 ))
+          LATEST=$(gh release list --repo "${{ github.repository }}" --limit 100 --json tagName \
+            --jq '[.[].tagName | select(startswith("build-")) | ltrimstr("build-") | tonumber] | max // 0')
+          echo "This build: $BUILD_NUMBER, newest published: $LATEST"
+          if [ "$BUILD_NUMBER" -le "$LATEST" ]; then
+            echo "::error::Build number $BUILD_NUMBER is not higher than published build $LATEST"
+            exit 1
+          fi
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Restore signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tunehub.jks"
-            echo "TUNEHUB_KEYSTORE=$RUNNER_TEMP/tunehub.jks" >> "$GITHUB_ENV"
-          else
-            echo "::warning::No KEYSTORE_BASE64 secret; APK is signed with a throwaway debug key"
-          fi
+          # fail closed: never fall back to a throwaway debug key for a published build
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "::error::Signing secret $v is missing"; exit 1; fi
+          done
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tunehub.jks"
+          echo "TUNEHUB_KEYSTORE=$RUNNER_TEMP/tunehub.jks" >> "$GITHUB_ENV"
 
       - name: Build release APK
         env:
@@ -49,23 +70,46 @@ jobs:
           TUNEHUB_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease --stacktrace
 
-      # Talks to the real YouTube; datacenter IPs get blocked sometimes, so don't fail the build
-      - name: YouTube extraction smoke test
+      - name: Verify the APK is signed with the release certificate
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          CERT=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk \
+            | grep -m1 "certificate SHA-256 digest" | awk '{print $NF}')
+          echo "Signed with: $CERT"
+          if [ "$CERT" != "$RELEASE_CERT_SHA256" ]; then
+            echo "::error::APK certificate $CERT does not match the release certificate"
+            exit 1
+          fi
+
+      # Deterministic tests (no network): these must pass before anything is published
+      - name: Unit tests
+        run: gradle testReleaseUnitTest --tests "com.tunehub.app.unit.*"
+
+      # Talks to the real YouTube; datacenter IPs get blocked sometimes, so this one only warns
+      - name: Live YouTube smoke test (advisory)
         continue-on-error: true
-        run: gradle testReleaseUnitTest
+        run: gradle testReleaseUnitTest --tests "com.tunehub.app.ExtractionTest"
 
       - uses: actions/upload-artifact@v4
         with:
           name: tunehub-apk
           path: app/build/outputs/apk/release/*.apk
 
-      # One release per build, never deleted, so GitHub's download counts add up across builds
+      # One release per build, never deleted, so GitHub's download counts add up across builds.
+      # Only from main; a re-run of an already published build stops here instead of failing later.
       - name: Publish release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          TAG="build-$BUILD_NUMBER"
+          if gh release view "$TAG" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "Release $TAG already exists; not replacing it"
+            exit 0
+          fi
           cp app/build/outputs/apk/release/app-release.apk tunehub.apk
-          gh release create "build-$BUILD_NUMBER" tunehub.apk \
+          gh release create "$TAG" tunehub.apk \
+            --repo "${{ github.repository }}" \
             --title "TuneHub build $BUILD_NUMBER" \
             --notes "Download **tunehub.apk** below and open it on your Android phone. It installs over older versions and keeps your library." \
             --target "${{ github.sha }}" \

@@ -18,6 +18,8 @@ data class Playlist(
     val name: String,
     val songs: List<Song> = emptyList(),
     val updatedAt: Long = 0,
+    /** When it was created (0 for playlists saved before this field existed). */
+    val addedAt: Long = 0,
 )
 
 /** A YouTube Music artist (a YouTube channel). */
@@ -27,6 +29,8 @@ data class ArtistRef(
     val name: String,
     val thumb: String? = null,
     val subscribers: Long = -1,
+    /** When the user followed it (0 for older entries). */
+    val addedAt: Long = 0,
 )
 
 /** A YouTube Music album or a public playlist. */
@@ -37,6 +41,8 @@ data class AlbumRef(
     val subtitle: String = "",
     val thumb: String? = null,
     val isAlbum: Boolean = true,
+    /** When the user saved it (0 for older entries). */
+    val addedAt: Long = 0,
 )
 
 /** One row of search / browse results. */
@@ -85,4 +91,39 @@ fun thumbSized(url: String?, px: Int): String? {
             url.replace("/hqdefault", "/mqdefault")
         else -> url
     }
+}
+
+private val VIDEO_ID = Regex("^[A-Za-z0-9_-]{11}$")
+
+/** YouTube video ids are exactly 11 characters from this alphabet; anything else is rejected. */
+fun isValidVideoId(id: String?): Boolean = id != null && VIDEO_ID.matches(id)
+
+/**
+ * A small thread-safe map that drops the least recently used entries beyond [maxSize], for
+ * session caches that would otherwise grow with every song touched.
+ */
+class BoundedCache<K : Any, V : Any>(private val maxSize: Int) {
+    private val map = object : LinkedHashMap<K, V>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?) = size > maxSize
+    }
+
+    @Synchronized
+    operator fun get(key: K): V? = map[key]
+
+    @Synchronized
+    operator fun set(key: K, value: V) {
+        map[key] = value
+    }
+
+    @Synchronized
+    fun remove(key: K): V? = map.remove(key)
+
+    @Synchronized
+    fun containsKey(key: K): Boolean = map.containsKey(key)
+
+    @Synchronized
+    fun getOrPut(key: K, create: () -> V): V = map[key] ?: create().also { map[key] = it }
+
+    @Synchronized
+    fun clear() = map.clear()
 }

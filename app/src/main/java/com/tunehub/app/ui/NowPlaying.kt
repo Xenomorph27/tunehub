@@ -1,5 +1,6 @@
 package com.tunehub.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,6 +54,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -190,17 +192,30 @@ private fun PlayPauseButton(size: Int) {
 // ------------------------------------------------------------------ now playing
 
 private sealed interface LyricsState {
+    /** Automatic lookup is off in Settings; nothing is sent until the user taps. */
+    data object NotRequested : LyricsState
     data object Loading : LyricsState
     data object Missing : LyricsState
+    /** LRCLIB couldn't be reached; tapping retries. */
+    data object Failed : LyricsState
     class Found(val result: Lyrics.Result) : LyricsState
 }
 
 @Composable
-private fun rememberLyrics(song: Song): LyricsState =
-    produceState<LyricsState>(LyricsState.Loading, song.id) {
+private fun rememberLyrics(song: Song, automatic: Boolean, attempt: Int): LyricsState =
+    produceState<LyricsState>(LyricsState.Loading, song.id, automatic, attempt) {
+        if (!automatic && attempt == 0) {
+            value = LyricsState.NotRequested
+            return@produceState
+        }
         value = LyricsState.Loading
-        val found = withContext(Dispatchers.IO) { runCatching { Lyrics.find(TuneHubApp.http, song) }.getOrNull() }
-        value = if (found == null) LyricsState.Missing else LyricsState.Found(found)
+        value = withContext(Dispatchers.IO) {
+            try {
+                Lyrics.find(TuneHubApp.http, song)?.let { LyricsState.Found(it) } ?: LyricsState.Missing
+            } catch (e: Exception) {
+                LyricsState.Failed
+            }
+        }
     }.value
 
 /** "OPUS 160K", or "OFFLINE" for downloads; appears once the service has resolved the stream. */
@@ -242,7 +257,9 @@ fun NowPlayingScreen(onClose: () -> Unit) {
     val position = rememberPosition(250)
     val duration = PlayerConnection.durationMs
     val glow = rememberArtColor(song.thumb, fallback = Aurora.Violet)
-    val lyrics = rememberLyrics(song)
+    var lyricsAttempt by remember(song.id) { mutableIntStateOf(0) }
+    val lyrics = rememberLyrics(song, settings.autoLyrics, lyricsAttempt)
+    val requestLyrics: () -> Unit = { lyricsAttempt++ }
 
     var seekPreview by remember { mutableStateOf<Float?>(null) }
     var showQueue by remember { mutableStateOf(false) }
@@ -362,7 +379,7 @@ fun NowPlayingScreen(onClose: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        GlassChip("Lyrics") { if (lyrics is LyricsState.Found) showLyrics = true }
+                        GlassChip("Lyrics") { if (lyrics is LyricsState.Found) showLyrics = true else requestLyrics() }
                         GlassChip("Hi-Res", selected = hiRes) { PlayerConnection.setHiRes(!hiRes) }
                         GlassChip("UltraTune", selected = ultra) { TuneHubApp.library.updateEq { it.copy(ultra = !it.ultra) } }
                         GlassChip("Queue") { showQueue = true }
@@ -388,7 +405,7 @@ fun NowPlayingScreen(onClose: () -> Unit) {
                     Spacer(Modifier.height(10.dp))
                 }
 
-                LyricsCard(lyrics, position, glow) { showLyrics = true }
+                LyricsCard(lyrics, position, glow, onRetry = requestLyrics) { showLyrics = true }
                 Spacer(
                     Modifier
                         .navigationBarsPadding()
@@ -396,6 +413,8 @@ fun NowPlayingScreen(onClose: () -> Unit) {
                 )
             }
 
+            // Back closes the full-screen lyrics before it closes Now Playing
+            BackHandler(enabled = showLyrics) { showLyrics = false }
             AnimatedVisibility(showLyrics, enter = fadeIn(), exit = fadeOut()) {
                 val found = lyrics as? LyricsState.Found
                 if (found != null) FullLyrics(found.result, position, glow) { showLyrics = false }
@@ -475,15 +494,16 @@ private fun currentLine(lines: List<Lyrics.Line>, positionMs: Long): Int =
     lines.indexOfLast { it.timeMs <= positionMs + 300 }
 
 @Composable
-private fun LyricsCard(state: LyricsState, position: Long, glow: Color, onExpand: () -> Unit) {
+private fun LyricsCard(state: LyricsState, position: Long, glow: Color, onRetry: () -> Unit, onExpand: () -> Unit) {
     val found = (state as? LyricsState.Found)?.result
+    val retryable = state is LyricsState.Failed || state is LyricsState.NotRequested
     Column(
         Modifier
             .padding(horizontal = 18.dp)
             .fillMaxWidth()
             .glass(RoundedCornerShape(30.dp), fill = Aurora.GlassStrong)
             .background(Brush.verticalGradient(listOf(glow.copy(alpha = 0.25f), Color.Transparent)))
-            .clickable(enabled = found != null, onClick = onExpand)
+            .clickable(enabled = found != null || retryable, onClick = if (found != null) onExpand else onRetry)
             .padding(20.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -493,6 +513,8 @@ private fun LyricsCard(state: LyricsState, position: Long, glow: Color, onExpand
         Spacer(Modifier.height(12.dp))
         when {
             state is LyricsState.Loading -> Text("Looking for lyrics…", color = Aurora.Muted)
+            state is LyricsState.NotRequested -> Text("Tap to look up lyrics on LRCLIB", color = Aurora.Muted)
+            state is LyricsState.Failed -> Text("Couldn't reach the lyrics service. Tap to try again.", color = Aurora.Muted)
             found == null -> Text("No lyrics found for this song.", color = Aurora.Muted)
             found.synced -> {
                 val current = currentLine(found.lines, position).coerceAtLeast(0)

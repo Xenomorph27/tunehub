@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older: back up the library (likes, playlists, settings), never audio files -->
+<full-backup-content>
+    <include domain="file" path="library.json" />
+    <exclude domain="file" path="downloads/" />
+</full-backup-content>

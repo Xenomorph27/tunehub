@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +49,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.tunehub.app.TuneHubApp
+import com.tunehub.app.data.LoadResult
 import com.tunehub.app.data.YouTube
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -104,7 +108,8 @@ private val tabs = listOf(
 
 @Composable
 private fun AppRoot() {
-    val nav = remember { Navigator() }
+    // survives rotation and the app being recreated
+    val nav = rememberSaveable(saver = Navigator.Saver) { Navigator() }
     var menu by remember { mutableStateOf<SongMenuRequest?>(null) }
     val searchVm: SearchViewModel = viewModel(key = "search")
     val homeVm: HomeViewModel = viewModel()
@@ -113,6 +118,23 @@ private fun AppRoot() {
     val hasPlayer = PlayerConnection.current != null
     // room for the floating mini player and nav pill, so lists end above them
     val bottomRoom by animateDpAsState(if (hasPlayer) 168.dp else 96.dp, label = "bottomRoom")
+
+    // tell the user once if their library file had to be recovered
+    LaunchedEffect(Unit) {
+        when (val result = TuneHubApp.library.loadResult) {
+            is LoadResult.Loaded -> if (result.fromBackup) {
+                Toast.makeText(context, "Your library file was damaged, so the last good copy was restored", Toast.LENGTH_LONG).show()
+            }
+            is LoadResult.Failed -> Toast.makeText(
+                context, "Your library couldn't be read. A copy was kept and your downloads are untouched", Toast.LENGTH_LONG,
+            ).show()
+            else -> Unit
+        }
+    }
+    val saveError by TuneHubApp.library.saveError.collectAsStateWithLifecycle()
+    LaunchedEffect(saveError) {
+        saveError?.let { Toast.makeText(context, "Couldn't save your library: $it", Toast.LENGTH_LONG).show() }
+    }
 
     LaunchedEffect(PlayerConnection.error) {
         PlayerConnection.error?.let {

@@ -44,6 +44,8 @@ private class LibEntry(
     val title: String,
     val subtitle: String,
     val kind: LibFilter?,
+    /** When it was added to the library (0 for entries saved before this was recorded). */
+    val addedAt: Long,
     val art: @Composable () -> Unit,
     val open: () -> Unit,
 )
@@ -59,28 +61,29 @@ fun LibraryScreen() {
 
     val pinned = buildList {
         if (filter == null || filter == LibFilter.Playlists) {
-            add(LibEntry("liked", "Liked Songs", "Playlist • ${data.liked.size} songs", null, { LikedCover(58.dp) }) { nav.open(Route.Liked) })
+            add(LibEntry("liked", "Liked Songs", "Playlist • ${data.liked.size} songs", null, Long.MAX_VALUE, { LikedCover(58.dp) }) { nav.open(Route.Liked) })
         }
         if ((filter == null || filter == LibFilter.Downloaded) && (data.downloads.isNotEmpty() || filter == LibFilter.Downloaded)) {
-            add(LibEntry("dl", "Downloads", "${data.downloads.size} songs", null, { DownloadsCover(58.dp) }) { nav.open(Route.Downloads) })
+            add(LibEntry("dl", "Downloads", "${data.downloads.size} songs", null, Long.MAX_VALUE, { DownloadsCover(58.dp) }) { nav.open(Route.Downloads) })
         }
     }
     val entries = buildList {
         data.playlists.forEach { p ->
-            add(LibEntry("p-" + p.id, p.name, "Playlist • ${p.songs.size} songs", LibFilter.Playlists, { PlaylistCover(p.songs, 58.dp) }) {
+            add(LibEntry("p-" + p.id, p.name, "Playlist • ${p.songs.size} songs", LibFilter.Playlists, p.addedAt, { PlaylistCover(p.songs, 58.dp) }) {
                 nav.open(Route.LocalPlaylist(p.id))
             })
         }
         data.albums.forEach { a ->
-            add(LibEntry("a-" + a.url, a.title, (if (a.isAlbum) "Album" else "Playlist") + " • " + a.subtitle, LibFilter.Albums,
+            add(LibEntry("a-" + a.url, a.title, (if (a.isAlbum) "Album" else "Playlist") + " • " + a.subtitle, LibFilter.Albums, a.addedAt,
                 { Artwork(a.thumb, 58.dp, placeholder = AppIcons.Album) }) { nav.open(Route.Album(a)) })
         }
         data.artists.forEach { a ->
-            add(LibEntry("r-" + a.url, a.name, "Artist", LibFilter.Artists,
+            add(LibEntry("r-" + a.url, a.name, "Artist", LibFilter.Artists, a.addedAt,
                 { Artwork(a.thumb, 58.dp, corner = 29.dp, placeholder = Icons.Default.Person) }) { nav.open(Route.Artist(a)) })
         }
     }.filter { filter == null || it.kind == filter }
-        .let { list -> if (sort == LibSort.Alpha) list.sortedBy { it.title.lowercase() } else list }
+        // newest first; the sort is stable, so older entries without a date keep their order
+        .let { list -> if (sort == LibSort.Alpha) list.sortedBy { it.title.lowercase() } else list.sortedByDescending { it.addedAt } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {

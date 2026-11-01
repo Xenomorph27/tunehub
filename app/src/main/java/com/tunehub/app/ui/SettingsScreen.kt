@@ -22,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tunehub.app.TuneHubApp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.tunehub.app.playback.PlaybackService
 
 @Composable
@@ -37,7 +40,10 @@ fun SettingsScreen(onBack: () -> Unit) {
     val data by library.data.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val nav = LocalNav.current
-    val downloadsMb = remember(data.downloads.size) { TuneHubApp.downloads.usedBytes() / (1024 * 1024) }
+    // measuring files is disk work: do it off the main thread
+    val downloadsMb by produceState(0L, data.downloads.size) {
+        value = withContext(Dispatchers.IO) { TuneHubApp.downloads.usedBytes() / (1024 * 1024) }
+    }
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
@@ -55,6 +61,12 @@ fun SettingsScreen(onBack: () -> Unit) {
         Header("Playback")
         ToggleRow("Autoplay", "Keep playing similar songs when your queue ends", data.autoplay, library::setAutoplay)
         ToggleRow("Hi-Res audio", "Stream the best quality YouTube offers. Off saves mobile data", !data.dataSaver) { PlayerConnection.setHiRes(it) }
+        ToggleRow(
+            "Look up lyrics automatically",
+            "Sends the song title and artist to lrclib.net when Now Playing opens. Off: only when you tap Lyrics",
+            data.autoLyrics,
+            library::setAutoLyrics,
+        )
         ActionRow("Equalizer & UltraTune", "Bass, treble, vocals, 3D sound and loudness") { nav.open(Route.Equalizer) }
 
         Header("Storage")
@@ -66,12 +78,15 @@ fun SettingsScreen(onBack: () -> Unit) {
         Header("About")
         ActionRow("Version", version) {}
         ActionRow("Get the latest build", "Opens the GitHub releases page") {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Xenomorph27/tunehub/releases/latest"))
-            )
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "No browser found. Visit $RELEASES_URL", Toast.LENGTH_LONG).show()
+            }
         }
         Text(
-            "TuneHub plays music from YouTube Music. Lyrics come from LRCLIB. Personal use only.",
+            "TuneHub plays music from YouTube Music. Lyrics come from LRCLIB. Your library stays on this " +
+                "phone (Android may include it in your device backup; downloaded audio is excluded). Personal use only.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),
@@ -118,3 +133,5 @@ private fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+private const val RELEASES_URL = "https://github.com/Xenomorph27/tunehub/releases/latest"
