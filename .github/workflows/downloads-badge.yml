@@ -1,0 +1,39 @@
+name: Downloads badge
+
+# Updates the README's downloads badge every hour. GitHub's own counts can't be reset, so the
+# badge shows downloads since the count was reset: the total across all releases minus BASELINE.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # total downloads at the moment the badge was reset to 3 (1 November 2026: 43 total)
+  BASELINE: 40
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Count downloads and publish the badge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          TOTAL=$(gh api "repos/$REPO/releases" --paginate --jq '[.[].assets[].download_count] | add // 0' | awk '{s+=$1} END {print s+0}')
+          COUNT=$(( TOTAL - BASELINE ))
+          if [ "$COUNT" -lt 0 ]; then COUNT=0; fi
+          echo "Total $TOTAL, badge shows $COUNT"
+
+          # the badge lives on its own branch so updating it never triggers an app build
+          mkdir badge && cd badge
+          printf '{"schemaVersion":1,"label":"downloads","message":"%s","color":"FFB547","namedLogo":"android"}\n' "$COUNT" > downloads.json
+          git init -q -b badges
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add downloads.json
+          git commit -q -m "Downloads badge: $COUNT"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" badges

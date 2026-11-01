@@ -9,7 +9,7 @@ Search anything, tap play, lock your phone. No ads, no account, no subscription.
 
 [![Download APK](https://img.shields.io/github/v/release/Xenomorph27/tunehub?label=download&logo=android&color=7B4DFF)](https://github.com/Xenomorph27/tunehub/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/Xenomorph27/tunehub/build.yml?branch=main&label=build)](https://github.com/Xenomorph27/tunehub/actions/workflows/build.yml)
-[![Downloads](https://img.shields.io/github/downloads/Xenomorph27/tunehub/total?label=downloads&color=FFB547)](https://github.com/Xenomorph27/tunehub/releases)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FXenomorph27%2Ftunehub%2Fbadges%2Fdownloads.json&cacheSeconds=3600)](https://github.com/Xenomorph27/tunehub/releases)
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-6FF3FF?logo=android)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FF3FB4)](LICENSE)
 
