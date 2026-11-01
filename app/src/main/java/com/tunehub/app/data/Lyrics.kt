@@ -70,7 +70,8 @@ object Lyrics {
 
     /** Loose title comparison: case, punctuation and bracketed extras don't matter. */
     internal fun titlesMatch(a: String, b: String): Boolean {
-        fun norm(s: String) = s.lowercase().replace(Regex("""\(.*?\)|\[.*?]"""), "")
+        // apostrophes vanish ("don't" == "dont"); other punctuation separates words
+        fun norm(s: String) = s.lowercase().replace(Regex("""\(.*?\)|\[.*?]"""), "").replace(Regex("""['’`]"""), "")
             .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim()
         val x = norm(a)
         val y = norm(b)
