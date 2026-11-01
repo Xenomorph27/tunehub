@@ -1,5 +1,7 @@
 # TuneHub codebase guide
 
+Updated after the first code review; see [REVIEW_FIXES.md](REVIEW_FIXES.md) for what changed.
+
 A complete map of the TuneHub Android app for code review: what every file does, how the
 pieces talk to each other, how a tap turns into sound, and where the known weak spots are.
 Paths are relative to the repo root. Kotlin package root: `com.tunehub.app`
@@ -42,9 +44,11 @@ device. There is no backend, no account and no analytics.
 │           ▼                         │                                                           │
 │  PlayerConnection (object) ── MediaController ──binder──► PlaybackService (MediaSessionService) │
 │                                                              ├─ ExoPlayer                       │
-│                                                              │    └─ CacheDataSource            │
-│                                                              │         └─ ResolvingDataSource   │
-│                                                              │              └─ OkHttpDataSource │
+│                                                              │    └─ ResolvingDataSource        │
+│                                                              │         └─ DefaultDataSource     │
+│                                                              │              ├─ file:// (offline)│
+│                                                              │              └─ CacheDataSource  │
+│                                                              │                   └─ OkHttp      │
 │                                                              ├─ AudioFx (EQ, bass, 3D, loud)    │
 │                                                              └─ SleepTimer                      │
 │                                                                                                 │
@@ -150,28 +154,30 @@ Tabs Home / Search / Library, each with its own route stack in `Navigator`. Tapp
 
 ## 5. Things a reviewer should look at
 
-Known or likely issues, roughly by impact:
+The first review's findings and their fixes are listed in [REVIEW_FIXES.md](REVIEW_FIXES.md).
+Key design points that came out of it, and what is still open:
 
-1. **Navigation state isn't saved** (`Navigator` is created in `remember`, not saveable). Rotation, a dark-mode switch or process death resets to Home. The orientation isn't locked.
-2. **Downloads aren't durable.** They run in an app-scoped coroutine: if Android kills the process, a download stops and its `.part` file is deleted on the next start. There's no WorkManager, no foreground notification, and no resume.
-3. **`PlayerConnection.pending` holds one action.** Two commands issued before the controller connects keep only the last one.
-4. **Unbounded maps:** `StreamResolver.locks` / `relatedCache`, `knownSongs`, `artColors`. Small per entry, but they grow with every song touched in a session.
-5. **Cache key reads global state.** `setCacheKeyFactory` reads `StreamResolver.dataSaver` at call time; a toggle during an in-flight load could key a few bytes under the wrong quality. `reloadCurrent` limits the window but doesn't close it.
-6. **The fast path depends on NewPipe internals** (`YoutubeStreamHelper`, `YoutubeJavaScriptPlayerManager`, and the JSON field names `adaptiveFormats`, `isDrc`, `audioTrack.audioIsDefault`). Extractor upgrades can break it; the fallback covers this, but check the behaviour after bumping the extractor version.
-7. **Error retry relies on `retriedId`**, which resets on every transition, so with autoplay a flaky network could cycle retry → skip across many songs.
-8. **The Library writes the whole JSON on every change.** Fine at today's sizes; slow if a user has thousands of liked songs. A corrupt file falls back to an empty library silently (no backup copy).
-9. **Lyrics** sends title and artist to lrclib.net (privacy disclosure belongs in the README or Settings). Matching is heuristic and can return the wrong song's lyrics.
-10. **AudioFx** effects are created on the service's main thread; some OEMs throw when several apps attach effects. Everything is wrapped in `runCatching`, which also hides real errors.
-11. **The exported `PlaybackService`** is required by Media3, but any app can bind and control playback (standard for music apps).
-12. **No unit tests for app logic** (StreamResolver selection, Lyrics parsing, Library mutations, Navigator); only live network smoke tests.
-13. **CI:** `BUILD_NUMBER = run_number + 15` is tied to the history of the build workflow; renaming or recreating that workflow resets `run_number` and would produce lower version codes, which phones refuse as an update.
-14. **Accessibility:** most icon buttons have content descriptions, but the waveform seek bar has no semantics for value or adjustment, and contrast of muted text on bright artwork glows is unverified.
+- **Library safety:** `LibraryStore` (plain JVM, unit-tested) loads as Missing / Loaded /
+  Failed, quarantines damaged files, falls back to `library.json.bak`, and writes with
+  temp-file + `fsync` + rename. `Library` batches writes through one conflated writer.
+  `loadedCleanly` gates every destructive cleanup.
+- **Stream identity:** the playback chain is Resolving → DefaultDataSource (file:// for
+  downloads) → CacheDataSource → OkHttp. The resolver sets the DataSpec key
+  `v2:<id>:<itag>[d]`, so cached bytes are always tied to one exact rendition. Lookups are
+  cached per (video id, quality).
+- **Radio:** owned by `PlaybackService`. The seed item carries a `radio` extra; appends are
+  checked against a queue generation.
+- **Still open:** exact queue restoration after process death; WorkManager-based downloads
+  with byte-offset resume; a controller allow-list for the exported session; async library
+  load at startup; browse ViewModels scoped to routes; a test suite that runs the minified
+  APK's extraction paths (the emulator check covers the UI, but YouTube blocks audio from CI).
 
 ## 6. How to build and verify
 
 ```bash
 gradle assembleRelease          # needs the Android SDK; CI does this on every push
-gradle testReleaseUnitTest      # live network smoke tests
+gradle testReleaseUnitTest --tests "com.tunehub.app.unit.*"   # deterministic, blocks releases
+gradle testReleaseUnitTest --tests "com.tunehub.app.ExtractionTest"   # live network, advisory
 ```
 
 Manual UI check: GitHub → Actions → "UI check (emulator)" → Run workflow, then download the
