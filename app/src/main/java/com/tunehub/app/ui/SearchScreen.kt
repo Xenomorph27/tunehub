@@ -370,6 +370,7 @@ private fun SearchHome(onSearch: (String) -> Unit, onGenre: (String) -> Unit) {
                 }
             }
         }
+        item { CreditFooter() }
     }
 }
 
@@ -393,6 +394,7 @@ private fun SearchResults(vm: SearchViewModel) {
             }
         }
         if (vm.loading) item { LoadingBox() }
+        item { CreditFooter() }
     }
 }
 
@@ -510,6 +512,7 @@ fun GenreScreen(name: String, onBack: () -> Unit) {
             val top = vm.top
             if (top != null) topResults(top, "", onMore = null) else if (vm.loading) item { LoadingBox() }
             vm.error?.let { e -> if (top == null) item { ErrorBox(e) { vm.submit("$name songs", remember = false) } } }
+            item { CreditFooter() }
         }
     }
 }

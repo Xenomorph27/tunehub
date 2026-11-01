@@ -238,6 +238,7 @@ fun HomeScreen(vm: HomeViewModel) {
                 }
             }
         }
+        item { CreditFooter() }
     }
 }
 

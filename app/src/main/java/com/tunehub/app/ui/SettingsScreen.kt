@@ -119,6 +119,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),
         )
+        CreditFooter()
     }
 }
 

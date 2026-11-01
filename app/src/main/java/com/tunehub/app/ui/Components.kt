@@ -71,6 +71,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -539,7 +540,10 @@ fun artistSubtitle(artist: ArtistRef): String = "Artist"
 @Composable
 fun BackPage(onBack: () -> Unit, content: LazyListScope.() -> Unit) {
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), content = content)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            content()
+            item { CreditFooter() }
+        }
         GlassIconButton(
             Icons.AutoMirrored.Filled.ArrowBack,
             "Back",
@@ -758,4 +762,29 @@ fun ConfirmDialog(request: ConfirmRequest?, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Aurora.Text) } },
     )
+}
+
+private const val REPO_URL = "https://github.com/Xenomorph27/tunehub"
+
+/** "Made by Barnak · Open Source" at the bottom of every page; "Open Source" opens the repo. */
+@Composable
+fun CreditFooter(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(top = 28.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Made by Barnak  ·  ", style = MaterialTheme.typography.bodySmall, color = Aurora.Muted)
+        Text(
+            "Open Source",
+            style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
+            color = Aurora.Lilac,
+            modifier = Modifier.clickable {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(REPO_URL))) }
+            },
+        )
+    }
 }

@@ -411,6 +411,7 @@ fun NowPlayingScreen(onClose: () -> Unit) {
                         .navigationBarsPadding()
                         .height(32.dp)
                 )
+                CreditFooter()
             }
 
             // Back closes the full-screen lyrics before it closes Now Playing

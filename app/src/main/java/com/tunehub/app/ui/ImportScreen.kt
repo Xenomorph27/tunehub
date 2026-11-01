@@ -266,6 +266,7 @@ private fun ReviewList(vm: ImportViewModel, onSave: () -> Unit) {
                 }
             }
         }
+        item { CreditFooter() }
     }
 }
 

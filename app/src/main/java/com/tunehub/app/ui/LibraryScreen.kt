@@ -138,6 +138,7 @@ fun LibraryScreen() {
                 )
             }
         }
+        item { CreditFooter() }
     }
 
     if (creating) {

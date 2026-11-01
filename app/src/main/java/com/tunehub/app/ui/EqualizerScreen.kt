@@ -170,6 +170,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
             color = Aurora.Muted,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
         )
+        CreditFooter()
     }
 }
 
