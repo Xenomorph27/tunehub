@@ -27,7 +27,10 @@ Search anything, tap play, lock your phone. No ads, no account, no subscription.
 3. Open the file. If Android asks, allow installing apps from your browser, then tap **Install**.
    Play Protect may warn because the app isn't from the Play Store: tap **More details → Install anyway**.
 
-New versions install right over the old one and keep your library.
+**Updating:** just install the new APK over the old one. Don't uninstall first: Android deletes
+an app's data when it's uninstalled. If you do reinstall, TuneHub keeps an automatic backup in
+`Download/TuneHub/` (Android 10+); tap **Restore backup** on the Home screen to bring your
+playlists and likes back.
 
 ## What it does
 
@@ -49,6 +52,10 @@ New versions install right over the old one and keep your library.
 - **Radio and autoplay**: start a radio from any song; when your queue ends it keeps going
   with related music. Home builds radio mixes from the artists you play.
 - **Offline downloads** and a 512 MB streaming cache.
+- **Import playlists** from Spotify or YouTube Music links, or from a CSV / text song list
+  (Amazon Music, Apple Music and others via a converter such as TuneMyMusic). You review the
+  matches before saving.
+- **Backup & restore**: automatic backup to Download/TuneHub, plus export / restore anywhere.
 - **Share to TuneHub**: share any YouTube or YouTube Music link to the app to play it.
 
 ## How it works

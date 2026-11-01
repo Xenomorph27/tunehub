@@ -69,6 +69,22 @@ fun SettingsScreen(onBack: () -> Unit) {
         )
         ActionRow("Equalizer & UltraTune", "Bass, treble, vocals, 3D sound and loudness") { nav.open(Route.Equalizer) }
 
+        Header("Backup & restore")
+        val lastBackup by TuneHubApp.backups.lastBackupAt.collectAsStateWithLifecycle()
+        val exportBackup = rememberExportAction()
+        val restoreBackup = rememberRestoreAction()
+        ToggleRow(
+            "Back up automatically",
+            if (!TuneHubApp.backups.autoSupported) "Needs Android 10 or newer. Use Export below instead"
+            else "Keeps a copy in Download/TuneHub that survives uninstalling" +
+                if (lastBackup > 0) " · last saved just now" else "",
+            data.autoBackup && TuneHubApp.backups.autoSupported,
+            library::setAutoBackup,
+        )
+        ActionRow("Export backup", "Save your playlists, likes and settings to a file you choose") { exportBackup() }
+        ActionRow("Restore from backup", "Pick a TuneHub backup file; it's merged with what's here") { restoreBackup() }
+        ActionRow("Import a playlist", "From Spotify, YouTube Music, or a CSV / text file") { nav.open(Route.Import) }
+
         Header("Storage")
         ActionRow("Downloads", "${data.downloads.size} songs • $downloadsMb MB") {}
         ActionRow("Streaming cache", "Up to 512 MB of recently played audio, cleared automatically") {}

@@ -106,6 +106,11 @@ tap desc "Settings"; sleep 3
 shot 16-settings
 tap prefix "Equalizer"; sleep 3
 shot 17-equalizer
+tap desc "Back"; sleep 2
+tap desc "Back"; sleep 2
+tap desc "Library"; sleep 2
+tap desc "Import playlist"; sleep 3
+shot 18-import
 
 adb logcat -d > "$OUT/logcat.txt"
 # only crashes of TuneHub itself count (the emulator's own apps sometimes crash)

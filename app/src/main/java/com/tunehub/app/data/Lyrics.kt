@@ -68,15 +68,8 @@ object Lyrics {
         )
         .firstOrNull { durationSec <= 0 || abs((it.duration ?: 0.0) - durationSec) < 15 }
 
-    /** Loose title comparison: case, punctuation and bracketed extras don't matter. */
-    internal fun titlesMatch(a: String, b: String): Boolean {
-        // apostrophes vanish ("don't" == "dont"); other punctuation separates words
-        fun norm(s: String) = s.lowercase().replace(Regex("""\(.*?\)|\[.*?]"""), "").replace(Regex("""['’`]"""), "")
-            .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim()
-        val x = norm(a)
-        val y = norm(b)
-        return x.isNotEmpty() && y.isNotEmpty() && (x == y || x.contains(y) || y.contains(x))
-    }
+    /** Loose title comparison; shared with playlist import. */
+    internal fun titlesMatch(a: String, b: String): Boolean = PlaylistImport.titlesMatch(a, b)
 
     private fun search(client: OkHttpClient, title: String, artist: String?): List<Track> {
         val url = "https://lrclib.net/api/search".toHttpUrl().newBuilder()

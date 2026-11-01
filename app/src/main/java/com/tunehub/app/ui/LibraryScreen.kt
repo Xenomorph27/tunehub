@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -94,6 +96,8 @@ fun LibraryScreen() {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Your Library", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                GlassIconButton(AppIcons.Download, "Import playlist") { nav.open(Route.Import) }
+                Spacer(Modifier.width(8.dp))
                 GlassIconButton(Icons.Default.Add, "Create playlist") { creating = true }
             }
         }

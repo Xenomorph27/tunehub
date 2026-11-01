@@ -34,12 +34,12 @@ jobs:
           gradle-version: "8.11.1"
 
       # Version codes must always rise, or phones refuse the update. Numbering continues from the
-      # "TuneHub build 27" release; the guard below also checks against the newest published build.
+      # "TuneHub build 49" release (run 15); the guard below also checks the newest published build.
       - name: Set build number
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 15 ))
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 34 ))
           LATEST=$(gh release list --repo "${{ github.repository }}" --limit 100 --json tagName \
             --jq '[.[].tagName | select(startswith("build-")) | ltrimstr("build-") | tonumber] | max // 0')
           echo "This build: $BUILD_NUMBER, newest published: $LATEST"

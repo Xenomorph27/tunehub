@@ -18,6 +18,7 @@ sealed interface Route {
     @Serializable data object Downloads : Route
     @Serializable data object Settings : Route
     @Serializable data object Equalizer : Route
+    @Serializable data object Import : Route
     @Serializable data class LocalPlaylist(val id: String) : Route
     @Serializable data class Album(val album: AlbumRef) : Route
     @Serializable data class Artist(val artist: ArtistRef) : Route

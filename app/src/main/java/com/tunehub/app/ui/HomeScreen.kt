@@ -49,6 +49,7 @@ import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.Song
 import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.data.YouTube
+import com.tunehub.app.data.isEmptyLibrary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -154,6 +155,8 @@ fun HomeScreen(vm: HomeViewModel) {
                 )
             }
         }
+
+        if (data.isEmptyLibrary()) item { RestoreCard() }
 
         val hero = PlayerConnection.current ?: recent.firstOrNull()
         if (hero != null) item { ContinueCard(hero, recent) }
@@ -400,4 +403,30 @@ private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_
     in 5..11 -> "Good morning"
     in 12..16 -> "Good afternoon"
     else -> "Good evening"
+}
+
+/** Shown while the library is empty, e.g. right after a reinstall: bring everything back. */
+@Composable
+private fun RestoreCard() {
+    val nav = LocalNav.current
+    val restore = rememberRestoreAction()
+    Column(
+        Modifier
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .fillMaxWidth()
+            .glass(RoundedCornerShape(28.dp), fill = Aurora.GlassStrong)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Reinstalled TuneHub?", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Restore your playlists and likes from your backup in Download/TuneHub, or import a playlist from Spotify.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Aurora.Muted,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GlassChip("Restore backup", selected = true, onClick = restore)
+            GlassChip("Import playlist") { nav.open(Route.Import) }
+        }
+    }
 }

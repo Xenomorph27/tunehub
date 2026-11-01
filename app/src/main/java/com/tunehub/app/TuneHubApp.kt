@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.tunehub.app.data.Backups
 import com.tunehub.app.data.Downloads
 import com.tunehub.app.data.Library
 import com.tunehub.app.data.StreamResolver
@@ -27,6 +28,8 @@ class TuneHubApp : Application(), ImageLoaderFactory {
         private set
     lateinit var downloads: Downloads
         private set
+    lateinit var backups: Backups
+        private set
     lateinit var http: OkHttpClient
         private set
 
@@ -44,6 +47,7 @@ class TuneHubApp : Application(), ImageLoaderFactory {
         )
         library = Library(filesDir)
         downloads = Downloads(this, http, library)
+        backups = Backups(this, library)
 
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
             library.data.map { it.dataSaver }.distinctUntilChanged().collect { StreamResolver.dataSaver = it }
@@ -65,6 +69,7 @@ class TuneHubApp : Application(), ImageLoaderFactory {
 
         val library: Library get() = instance.library
         val downloads: Downloads get() = instance.downloads
+        val backups: Backups get() = instance.backups
         val http: OkHttpClient get() = instance.http
     }
 }

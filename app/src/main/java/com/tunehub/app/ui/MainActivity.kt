@@ -171,6 +171,7 @@ private fun AppRoot() {
                     Route.Downloads -> DownloadsScreen(onBack = nav::back)
                     Route.Settings -> SettingsScreen(onBack = nav::back)
                     Route.Equalizer -> EqualizerScreen(onBack = nav::back)
+                    Route.Import -> ImportScreen(onBack = nav::back)
                     is Route.LocalPlaylist -> LocalPlaylistScreen(route.id, onBack = nav::back)
                     is Route.Album -> AlbumScreen(route.album, onBack = nav::back)
                     is Route.Artist -> ArtistScreen(route.artist, onBack = nav::back)

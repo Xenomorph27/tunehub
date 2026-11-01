@@ -51,6 +51,8 @@ data class LibraryData(
     val dataSaver: Boolean = false,
     /** Look lyrics up on LRCLIB automatically (sends title and artist to lrclib.net). */
     val autoLyrics: Boolean = true,
+    /** Keep a copy of the library in Download/TuneHub so it survives uninstalling. */
+    val autoBackup: Boolean = true,
     val eq: EqSettings = EqSettings(),
 ) {
     companion object {
@@ -263,6 +265,14 @@ class Library(dir: File) {
     fun setAutoLyrics(enabled: Boolean) = update { it.copy(autoLyrics = enabled) }
 
     fun updateEq(change: (EqSettings) -> EqSettings) = update { it.copy(eq = change(it.eq)) }
+
+    fun setAutoBackup(enabled: Boolean) = update { it.copy(autoBackup = enabled) }
+
+    /** Merges a restored backup into the library (nothing already here is lost). */
+    fun restore(incoming: LibraryData) = update { mergeLibraries(it, incoming) }
+
+    /** Saves an imported playlist; returns its id. */
+    fun importPlaylist(name: String, songs: List<Song>): String = createPlaylist(name, songs.distinctBy { it.id })
 
     // ---------------------------------------------------------------- storage
 
