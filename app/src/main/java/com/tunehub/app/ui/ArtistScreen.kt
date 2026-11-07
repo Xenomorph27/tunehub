@@ -104,18 +104,18 @@ fun ArtistScreen(artist: ArtistRef, onBack: () -> Unit) {
                             .height(220.dp),
                     )
                 }
-                // the banner melts into the aurora; the artist's color glows behind the avatar
+                // Blend the banner edge into the page behind the avatar.
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(220.dp)
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Aurora.Ink.copy(alpha = 0.6f), Aurora.Ink.copy(alpha = 0f)))),
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, tuneColors.background))),
                 )
                 Box(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .size(320.dp)
-                        .background(Brush.radialGradient(listOf(tint.copy(alpha = 0.45f), Color.Transparent))),
+                        .background(Brush.radialGradient(listOf(tint.copy(alpha = 0.14f), Color.Transparent))),
                 )
                 Column(
                     Modifier.align(Alignment.BottomCenter),
@@ -125,7 +125,7 @@ fun ArtistScreen(artist: ArtistRef, onBack: () -> Unit) {
                         Modifier
                             .size(176.dp)
                             .clip(CircleShape)
-                            .background(Aurora.accent)
+                            .background(tuneColors.accent)
                             .padding(4.dp),
                     ) {
                         Artwork(info.thumb, 168.dp, corner = 84.dp, placeholder = Icons.Default.Person)
@@ -144,17 +144,17 @@ fun ArtistScreen(artist: ArtistRef, onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                GlassChip(if (following) "Following" else "Follow", selected = following) { library.toggleFollow(info) }
+                FilterPill(if (following) "Following" else "Follow", selected = following) { library.toggleFollow(info) }
                 if (info.subscribers > 0) {
                     Text(
                         "${formatCount(info.subscribers)} subscribers",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Aurora.Muted,
+                        color = tuneColors.muted,
                     )
                 }
                 Spacer(Modifier.weight(1f))
                 val popular = page?.popular.orEmpty()
-                GlassIconButton(AppIcons.Shuffle, "Shuffle", size = 48.dp) {
+                PanelIconButton(AppIcons.Shuffle, "Shuffle", size = 48.dp) {
                     if (popular.isNotEmpty()) PlayerConnection.play(popular, popular.indices.random(), shuffled = true)
                 }
                 PlayCircle(enabled = popular.isNotEmpty()) { PlayerConnection.play(popular) }

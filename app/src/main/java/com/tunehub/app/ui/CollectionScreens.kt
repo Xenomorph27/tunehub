@@ -36,11 +36,13 @@ import com.tunehub.app.data.totalDuration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-private fun songMeta(songs: List<Song>): String =
-    listOf("${songs.size} songs", totalDuration(songs)).filter { it.isNotBlank() }.joinToString(" • ")
+internal fun songCountLabel(count: Int): String = if (count == 1) "1 song" else "$count songs"
 
-private fun shuffle(songs: List<Song>) {
-    if (songs.isNotEmpty()) PlayerConnection.play(songs, songs.indices.random(), shuffled = true)
+private fun songMeta(songs: List<Song>): String =
+    listOf(songCountLabel(songs.size), totalDuration(songs)).filter { it.isNotBlank() }.joinToString(" • ")
+
+private fun shuffle(songs: List<Song>, playlistId: String? = null) {
+    if (songs.isNotEmpty()) PlayerConnection.play(songs, songs.indices.random(), shuffled = true, playlistId = playlistId)
 }
 
 // ------------------------------------------------------------------ YouTube albums & playlists
@@ -97,11 +99,11 @@ fun AlbumScreen(album: AlbumRef, onBack: () -> Unit) {
                     { nav.open(Route.Artist(ArtistRef(url, info.subtitle))) }
                 },
                 actions = {
-                    GlassIconButton(
+                    PanelIconButton(
                         if (saved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         if (saved) "Remove from library" else "Save to library",
                         size = 48.dp,
-                        tint = if (saved) Aurora.Pink else Aurora.Text,
+                        tint = if (saved) tuneColors.danger else tuneColors.text,
                     ) { library.toggleAlbum(info) }
                     DownloadAllButton(songs)
                 },
@@ -135,7 +137,7 @@ fun LikedScreen(onBack: () -> Unit) {
                 title = "Liked Songs",
                 subtitle = "",
                 meta = songMeta(songs),
-                tint = Aurora.Pink,
+                tint = tuneColors.danger,
                 art = { LikedCover(230.dp, corner = 34.dp) },
                 playEnabled = songs.isNotEmpty(),
                 onPlay = { PlayerConnection.play(songs) },
@@ -151,6 +153,18 @@ fun LikedScreen(onBack: () -> Unit) {
 }
 
 @Composable
+fun RecentScreen(onBack: () -> Unit) {
+    val data by TuneHubApp.library.data.collectAsStateWithLifecycle()
+    val songs = data.recent.take(50)
+    BackPage(onBack, heading = { ScreenHeading("HISTORY", "Recently played") }) {
+        if (songs.isEmpty()) item { EmptyHint("Your listening history will appear here.") }
+        itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
+            SongRow(song, onClick = { PlayerConnection.play(songs, index) })
+        }
+    }
+}
+
+@Composable
 fun DownloadsScreen(onBack: () -> Unit) {
     val data by TuneHubApp.library.data.collectAsStateWithLifecycle()
     val progress by TuneHubApp.downloads.progress.collectAsStateWithLifecycle()
@@ -161,7 +175,7 @@ fun DownloadsScreen(onBack: () -> Unit) {
                 title = "Downloads",
                 subtitle = "",
                 meta = songMeta(songs) + if (progress.isNotEmpty()) " • ${progress.size} downloading" else "",
-                tint = Aurora.Cyan,
+                tint = tuneColors.accentText,
                 art = { DownloadsCover(230.dp, corner = 34.dp) },
                 playEnabled = songs.isNotEmpty(),
                 onPlay = { PlayerConnection.play(songs) },
@@ -209,13 +223,14 @@ fun LocalPlaylistScreen(id: String, onBack: () -> Unit) {
                 subtitle = "",
                 meta = "Playlist • " + songMeta(songs),
                 tint = rememberArtColor(songs.firstOrNull()?.thumb),
-                art = { PlaylistCover(songs, 230.dp, corner = 34.dp) },
+                art = { PlaylistCover(songs, if (songs.size <= 1) 156.dp else 230.dp, corner = 28.dp) },
+                artworkBackdropSize = if (songs.size <= 1) 156.dp else 300.dp,
                 playEnabled = songs.isNotEmpty(),
-                onPlay = { PlayerConnection.play(songs) },
-                onShuffle = { shuffle(songs) },
+                onPlay = { PlayerConnection.play(songs, playlistId = id) },
+                onShuffle = { shuffle(songs, playlistId = id) },
                 topActions = {
-                    GlassIconButton(Icons.Default.Edit, "Rename") { renaming = true }
-                    GlassIconButton(Icons.Default.Delete, "Delete playlist") {
+                    PanelIconButton(Icons.Default.Edit, "Rename") { renaming = true }
+                    PanelIconButton(Icons.Default.Delete, "Delete playlist") {
                         confirm = ConfirmRequest(
                             "Delete \"${playlist.name}\"?",
                             "This playlist and its ${songs.size} songs will be removed from your library. This can't be undone.",
@@ -230,17 +245,7 @@ fun LocalPlaylistScreen(id: String, onBack: () -> Unit) {
             item { EmptyHint("Find songs in Search, then use ⋮ → Add to playlist.") }
         }
         itemsIndexed(songs, key = { _, s -> s.id }) { i, song ->
-            SongRow(song, onClick = { PlayerConnection.play(songs, i) }, playlistId = playlist.id)
-        }
-        if (songs.isNotEmpty()) {
-            item {
-                Text(
-                    "Long-press a song for more options.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
+            SongRow(song, onClick = { PlayerConnection.play(songs, i, playlistId = id) }, playlistId = id)
         }
     }
 

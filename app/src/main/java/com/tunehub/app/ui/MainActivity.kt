@@ -8,32 +8,38 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,10 +49,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tunehub.app.TuneHubApp
@@ -62,7 +72,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { TuneHubTheme { AppRoot() } }
+        setContent {
+            val dark = isSystemInDarkTheme()
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            TuneHubTheme { AppRoot() }
+        }
         if (savedInstanceState == null) handleShare(intent)
     }
 
@@ -112,12 +131,12 @@ private fun AppRoot() {
     val nav = rememberSaveable(saver = Navigator.Saver) { Navigator() }
     var menu by remember { mutableStateOf<SongMenuRequest?>(null) }
     val searchVm: SearchViewModel = viewModel(key = "search")
-    val homeVm: HomeViewModel = viewModel()
     val context = LocalContext.current
-    val artTint = rememberArtColor(PlayerConnection.current?.thumb, fallback = Aurora.Cyan)
     val hasPlayer = PlayerConnection.current != null
-    // room for the floating mini player and nav pill, so lists end above them
-    val bottomRoom by animateDpAsState(if (hasPlayer) 168.dp else 96.dp, label = "bottomRoom")
+    // Reserve the actual dock height so large navigation labels never overlap the screen.
+    var dockHeight by remember { mutableStateOf(0.dp) }
+    val bottomRoom by animateDpAsState(dockHeight, label = "bottomRoom")
+    val density = LocalDensity.current
 
     // tell the user once if their library file had to be recovered
     LaunchedEffect(Unit) {
@@ -149,10 +168,10 @@ private fun AppRoot() {
     CompositionLocalProvider(
         LocalNav provides nav,
         LocalSongMenu provides { menu = it },
-        LocalContentColor provides Aurora.Text,
+        LocalContentColor provides tuneColors.text,
     ) {
         Box(Modifier.fillMaxSize()) {
-            AuroraBackground(tint = if (hasPlayer) artTint else null)
+            PaperBackground()
 
             Box(
                 Modifier
@@ -163,11 +182,12 @@ private fun AppRoot() {
             ) {
                 when (val route = nav.current) {
                     null -> when (nav.tab) {
-                        0 -> HomeScreen(homeVm)
+                        0 -> HomeScreen(viewModel())
                         1 -> SearchScreen(searchVm)
                         else -> LibraryScreen()
                     }
                     Route.Liked -> LikedScreen(onBack = nav::back)
+                    Route.Recent -> RecentScreen(onBack = nav::back)
                     Route.Downloads -> DownloadsScreen(onBack = nav::back)
                     Route.Settings -> SettingsScreen(onBack = nav::back)
                     Route.Equalizer -> EqualizerScreen(onBack = nav::back)
@@ -179,21 +199,20 @@ private fun AppRoot() {
                 }
             }
 
-            Column(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                MiniPlayer(onOpen = { nav.nowPlayingOpen = true })
-                PillNav(selected = nav.tab, onSelect = nav::selectTab)
+            Box(Modifier.align(Alignment.BottomCenter).background(tuneColors.background).navigationBarsPadding()) {
+                Column(
+                    Modifier.onSizeChanged { size -> dockHeight = with(density) { size.height.toDp() } },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    MiniPlayer(onOpen = { nav.nowPlayingOpen = true })
+                    BottomTabs(selected = nav.tab, onSelect = nav::selectTab)
+                }
             }
 
             AnimatedVisibility(
                 visible = nav.nowPlayingOpen && hasPlayer,
-                enter = slideInVertically { it },
-                exit = slideOutVertically { it },
+                enter = slideInVertically(tween(240)) { it },
+                exit = slideOutVertically(tween(180)) { it },
             ) {
                 NowPlayingScreen(onClose = { nav.nowPlayingOpen = false })
             }
@@ -203,30 +222,42 @@ private fun AppRoot() {
     }
 }
 
-/** Floating glass pill with the three tabs; the active one sits in a gradient bubble. */
 @Composable
-private fun PillNav(selected: Int, onSelect: (Int) -> Unit) {
+private fun BottomTabs(selected: Int, onSelect: (Int) -> Unit) {
+    HorizontalDivider(color = tuneColors.rule)
     Row(
         Modifier
-            .padding(top = 10.dp)
-            .width(260.dp)
-            .height(66.dp)
-            .glass(RoundedCornerShape(33.dp), fill = Aurora.Sheet.copy(alpha = 0.82f)),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+            .fillMaxWidth()
+            .background(tuneColors.background)
+            .selectableGroup()
+            .padding(horizontal = 16.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         tabs.forEachIndexed { i, tab ->
             val active = i == selected
-            Box(
+            val background by animateColorAsState(
+                if (active) tuneColors.surface else tuneColors.background,
+                tween(160),
+                label = "tabBackground",
+            )
+            val tint by animateColorAsState(
+                if (active) tuneColors.accentText else tuneColors.muted,
+                tween(160),
+                label = "tabContent",
+            )
+            Column(
                 Modifier
-                    .size(width = 64.dp, height = 46.dp)
-                    .clip(RoundedCornerShape(23.dp))
-                    .then(if (active) Modifier.background(Aurora.accent) else Modifier)
-                    .clickable { onSelect(i) }
-                    .semantics { contentDescription = tab.label },
-                contentAlignment = Alignment.Center,
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(background)
+                    .selectable(selected = active, role = Role.Tab) { onSelect(i) }
+                    .semantics { contentDescription = tab.label }
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(tab.icon, null, tint = if (active) Aurora.Ink else Aurora.Muted, modifier = Modifier.size(24.dp))
+                Icon(tab.icon, null, tint = tint, modifier = Modifier.size(22.dp))
+                Text(tab.label, style = MaterialTheme.typography.labelMedium, color = tint)
             }
         }
     }

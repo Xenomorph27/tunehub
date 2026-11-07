@@ -34,13 +34,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,8 +71,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,7 +94,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 // ------------------------------------------------------------------ artwork
 
-/** Album art at the right resolution for its size, over a glass placeholder. */
+/** Album art at the right resolution for its size, over a matte placeholder. */
 @Composable
 fun Artwork(
     url: String?,
@@ -107,10 +108,10 @@ fun Artwork(
         modifier
             .size(size)
             .clip(RoundedCornerShape(corner))
-            .background(Aurora.GlassStrong),
+            .background(tuneColors.raised),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(placeholder, null, tint = Aurora.Muted, modifier = Modifier.fillMaxSize(0.4f))
+        Icon(placeholder, null, tint = tuneColors.muted, modifier = Modifier.fillMaxSize(0.4f))
         if (url != null) {
             AsyncImage(
                 model = thumbSized(url, px),
@@ -153,12 +154,12 @@ fun PlaylistCover(songs: List<Song>, size: Dp, corner: Dp = 14.dp) {
 }
 
 @Composable
-private fun IconCover(size: Dp, corner: Dp, brush: Brush, icon: ImageVector, tint: Color) {
+private fun IconCover(size: Dp, corner: Dp, fill: Color, icon: ImageVector, tint: Color) {
     Box(
         Modifier
             .size(size)
             .clip(RoundedCornerShape(corner))
-            .background(brush),
+            .background(fill),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, null, tint = tint, modifier = Modifier.fillMaxSize(0.42f))
@@ -167,17 +168,21 @@ private fun IconCover(size: Dp, corner: Dp, brush: Brush, icon: ImageVector, tin
 
 @Composable
 fun LikedCover(size: Dp, corner: Dp = 14.dp) =
-    IconCover(size, corner, Brush.linearGradient(listOf(Aurora.Violet, Aurora.Pink)), Icons.Default.Favorite, Color.White)
+    IconCover(size, corner, tuneColors.accent, Icons.Default.Favorite, tuneColors.onAccent)
+
+@Composable
+fun RecentCover(size: Dp, corner: Dp = 14.dp) =
+    IconCover(size, corner, tuneColors.raised, AppIcons.History, tuneColors.accentText)
 
 @Composable
 fun DownloadsCover(size: Dp, corner: Dp = 14.dp) =
-    IconCover(size, corner, Brush.linearGradient(listOf(Aurora.Cyan, Aurora.Violet)), AppIcons.Download, Aurora.Ink)
+    IconCover(size, corner, tuneColors.raised, AppIcons.Download, tuneColors.accentText)
 
 private val artColors = ConcurrentHashMap<String, Color>()
 
 /** A vivid color pulled from the artwork, for the glows behind it. */
 @Composable
-fun rememberArtColor(url: String?, fallback: Color = Aurora.Violet): Color {
+fun rememberArtColor(url: String?, fallback: Color = tuneColors.accent): Color {
     val context = LocalContext.current
     var color by remember(url) { mutableStateOf(url?.let { artColors[it] } ?: fallback) }
     LaunchedEffect(url) {
@@ -241,7 +246,7 @@ fun SongRow(
             Text(
                 trackNumber.toString(),
                 style = MaterialTheme.typography.titleSmall,
-                color = if (active) Aurora.Cyan else Aurora.Muted,
+                color = if (active) tuneColors.accentText else tuneColors.muted,
                 modifier = Modifier.widthIn(min = 30.dp),
             )
         }
@@ -254,7 +259,7 @@ fun SongRow(
             Text(
                 song.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (active) Aurora.Cyan else Aurora.Text,
+                color = if (active) tuneColors.accentText else tuneColors.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -262,7 +267,7 @@ fun SongRow(
                 if (downloaded) {
                     Icon(
                         AppIcons.DownloadDone, "Downloaded",
-                        tint = Aurora.Cyan,
+                        tint = tuneColors.accentText,
                         modifier = Modifier
                             .size(15.dp)
                             .padding(end = 3.dp),
@@ -272,14 +277,14 @@ fun SongRow(
                 Text(
                     if (duration.isEmpty()) song.artist else "${song.artist} • $duration",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Aurora.Muted,
+                    color = tuneColors.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
         IconButton(onClick = { openMenu(SongMenuRequest(song, playlistId)) }) {
-            Icon(Icons.Default.MoreVert, "More", tint = Aurora.Muted)
+            Icon(Icons.Default.MoreVert, "More", tint = tuneColors.muted)
         }
     }
 }
@@ -303,7 +308,7 @@ fun SongActionsSheet(request: SongMenuRequest, onDismiss: () -> Unit) {
     val downloaded = song.id in downloadedIds
     val downloading = progress.containsKey(song.id)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Aurora.Sheet) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = tuneColors.surface) {
         Row(
             Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -311,10 +316,10 @@ fun SongActionsSheet(request: SongMenuRequest, onDismiss: () -> Unit) {
             Artwork(song.thumb, 56.dp)
             Column(Modifier.padding(start = 14.dp)) {
                 Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = Aurora.Muted)
+                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = tuneColors.muted)
             }
         }
-        HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Aurora.Stroke)
+        HorizontalDivider(Modifier.padding(vertical = 10.dp), color = tuneColors.rule)
 
         if (pickingPlaylist) {
             PlaylistPicker(song, onDone = onDismiss)
@@ -324,7 +329,7 @@ fun SongActionsSheet(request: SongMenuRequest, onDismiss: () -> Unit) {
         SheetAction(
             if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
             if (liked) "Remove from Liked Songs" else "Add to Liked Songs",
-            tint = if (liked) Aurora.Pink else null,
+            tint = if (liked) tuneColors.danger else null,
         ) { library.toggleLike(song); onDismiss() }
         SheetAction(AppIcons.PlaylistAdd, "Add to playlist") { pickingPlaylist = true }
         SheetAction(AppIcons.SkipNext, "Play next") { PlayerConnection.playNext(song); onDismiss() }
@@ -387,7 +392,7 @@ private fun ColumnScope.PlaylistPicker(song: Song, onDone: () -> Unit) {
                     Text(
                         if (already) "Already added" else "${p.songs.size} songs",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Aurora.Muted,
+                        color = tuneColors.muted,
                     )
                 }
             }
@@ -421,15 +426,15 @@ private fun SheetAction(
         Box(
             Modifier
                 .size(38.dp)
-                .glass(RoundedCornerShape(12.dp)),
+                .panel(RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, tint = tint ?: Aurora.Lilac, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = tint ?: tuneColors.accentText, modifier = Modifier.size(20.dp))
         }
         Text(
             label,
             style = MaterialTheme.typography.titleMedium,
-            color = if (enabled) Aurora.Text else Aurora.Muted,
+            color = if (enabled) tuneColors.text else tuneColors.muted,
             modifier = Modifier.padding(start = 16.dp),
         )
     }
@@ -462,7 +467,7 @@ fun AlbumCard(album: AlbumRef, size: Dp = 150.dp, onClick: () -> Unit) {
             Text(
                 album.subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = Aurora.Muted,
+                color = tuneColors.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -482,7 +487,7 @@ fun ArtistCircle(artist: ArtistRef, size: Dp = 128.dp, onClick: () -> Unit) {
             Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(Aurora.accent)
+                .background(tuneColors.accent)
                 .padding(3.dp),
         ) {
             Artwork(artist.thumb, size - 6.dp, corner = size / 2, placeholder = Icons.Default.Person)
@@ -494,7 +499,7 @@ fun ArtistCircle(artist: ArtistRef, size: Dp = 128.dp, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
         )
-        Text("Artist", style = MaterialTheme.typography.bodySmall, color = Aurora.Muted)
+        Text("Artist", style = MaterialTheme.typography.bodySmall, color = tuneColors.muted)
     }
 }
 
@@ -507,6 +512,7 @@ fun BrowseRow(
     round: Boolean = false,
     placeholder: ImageVector = AppIcons.Album,
     art: (@Composable () -> Unit)? = null,
+    showChevron: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
@@ -517,18 +523,19 @@ fun BrowseRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (art != null) art() else Artwork(thumb, 58.dp, corner = if (round) 29.dp else 14.dp, placeholder = placeholder)
-        Column(Modifier.padding(start = 14.dp)) {
+        Column(Modifier.weight(1f).padding(start = 14.dp, end = if (showChevron) 8.dp else 0.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle.isNotBlank()) {
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Aurora.Muted,
+                    color = tuneColors.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
+        if (showChevron) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = tuneColors.muted)
     }
 }
 
@@ -536,19 +543,32 @@ fun artistSubtitle(artist: ArtistRef): String = "Artist"
 
 // ------------------------------------------------------------------ collection pages
 
-/** A scrolling page with a glass back button that stays put while the content scrolls. */
+/** A scrolling page with a back button that stays put while the content scrolls. */
 @Composable
-fun BackPage(onBack: () -> Unit, content: LazyListScope.() -> Unit) {
+fun BackPage(onBack: () -> Unit, heading: (@Composable () -> Unit)? = null, content: LazyListScope.() -> Unit) {
+    if (heading != null) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PanelIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+                Box(Modifier.weight(1f)) { heading() }
+            }
+            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp), content = content)
+        }
+        return
+    }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             content()
-            item { CreditFooter() }
         }
-        GlassIconButton(
+        PanelIconButton(
             Icons.AutoMirrored.Filled.ArrowBack,
             "Back",
             modifier = Modifier.padding(12.dp),
-            fill = Aurora.Ink.copy(alpha = 0.55f),
+            fill = tuneColors.background,
             onClick = onBack,
         )
     }
@@ -565,6 +585,7 @@ fun CollectionHeader(
     playEnabled: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    artworkBackdropSize: Dp = 300.dp,
     onSubtitleClick: (() -> Unit)? = null,
     topActions: @Composable RowScope.() -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
@@ -587,7 +608,7 @@ fun CollectionHeader(
         ) {
             Box(
                 Modifier
-                    .size(300.dp)
+                    .size(artworkBackdropSize)
                     .background(Brush.radialGradient(listOf(tint.copy(alpha = 0.55f), Color.Transparent))),
             )
             art()
@@ -598,7 +619,7 @@ fun CollectionHeader(
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Aurora.Lilac,
+                    color = tuneColors.accentText,
                     modifier = Modifier
                         .padding(top = 6.dp)
                         .then(if (onSubtitleClick != null) Modifier.clickable(onClick = onSubtitleClick) else Modifier),
@@ -608,7 +629,7 @@ fun CollectionHeader(
                 Text(
                     meta,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Aurora.Muted,
+                    color = tuneColors.muted,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -621,7 +642,7 @@ fun CollectionHeader(
             ) {
                 actions()
                 Spacer(Modifier.weight(1f))
-                GlassIconButton(AppIcons.Shuffle, "Shuffle play", size = 48.dp, onClick = { if (playEnabled) onShuffle() })
+                PanelIconButton(AppIcons.Shuffle, "Shuffle play", size = 48.dp, onClick = { if (playEnabled) onShuffle() })
                 PlayCircle(enabled = playEnabled, onClick = onPlay)
             }
         }
@@ -630,7 +651,7 @@ fun CollectionHeader(
 
 @Composable
 fun PlayCircle(enabled: Boolean = true, size: Dp = 60.dp, onClick: () -> Unit) =
-    GradientCircleButton(Icons.Default.PlayArrow, "Play", size, enabled = enabled, onClick = onClick)
+    AccentCircleButton(AppIcons.Play, "Play", size, enabled = enabled, onClick = onClick)
 
 /** Download-all toggle for a list of songs; shows progress while downloading. */
 @Composable
@@ -645,7 +666,7 @@ fun DownloadAllButton(songs: List<Song>) {
     Box(
         Modifier
             .size(48.dp)
-            .glass(RoundedCornerShape(17.dp))
+            .panel(RoundedCornerShape(17.dp))
             .clickable(enabled = songs.isNotEmpty() && !busy) {
                 if (all) {
                     confirm = ConfirmRequest(
@@ -660,9 +681,9 @@ fun DownloadAllButton(songs: List<Song>) {
         contentAlignment = Alignment.Center,
     ) {
         when {
-            busy -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Aurora.Cyan)
-            all -> Icon(AppIcons.DownloadDone, "Remove downloads", tint = Aurora.Cyan)
-            else -> Icon(AppIcons.Download, "Download all", tint = Aurora.Text)
+            busy -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = tuneColors.accentText)
+            all -> Icon(AppIcons.DownloadDone, "Remove downloads", tint = tuneColors.accentText)
+            else -> Icon(AppIcons.Download, "Download all", tint = tuneColors.text)
         }
     }
 }
@@ -679,7 +700,7 @@ fun NamePlaylistDialog(
     var name by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Aurora.Sheet,
+        containerColor = tuneColors.surface,
         title = { Text(title, style = MaterialTheme.typography.headlineSmall) },
         text = {
             OutlinedTextField(
@@ -693,8 +714,16 @@ fun NamePlaylistDialog(
         confirmButton = {
             TextButton(enabled = name.isNotBlank(), onClick = { onConfirm(name); onDismiss() }) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Aurora.Muted) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = tuneColors.muted) } },
     )
+}
+
+@Composable
+fun ScreenHeading(label: String, title: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tuneColors.accentText)
+        Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+    }
 }
 
 @Composable
@@ -706,7 +735,7 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier, action: String? = 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-        if (action != null) TextButton(onClick = onAction) { Text(action, color = Aurora.Lilac) }
+        if (action != null) TextButton(onClick = onAction) { Text(action, color = tuneColors.accentText) }
     }
 }
 
@@ -715,7 +744,7 @@ fun EmptyHint(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
         style = MaterialTheme.typography.bodyLarge,
-        color = Aurora.Muted,
+        color = tuneColors.muted,
         modifier = modifier.padding(horizontal = 20.dp, vertical = 24.dp),
     )
 }
@@ -727,7 +756,7 @@ fun LoadingBox(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(48.dp),
         contentAlignment = Alignment.Center,
-    ) { CircularProgressIndicator(Modifier.size(34.dp), color = Aurora.Cyan, strokeWidth = 3.dp) }
+    ) { CircularProgressIndicator(Modifier.size(34.dp), color = tuneColors.accentText, strokeWidth = 3.dp) }
 }
 
 @Composable
@@ -739,14 +768,19 @@ fun ErrorBox(message: String, onRetry: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(message, style = MaterialTheme.typography.bodyLarge, color = Aurora.Muted)
-        GlassChip("Retry", onClick = onRetry)
+        Text(message, style = MaterialTheme.typography.bodyLarge, color = tuneColors.muted)
+        FilterPill("Retry", onClick = onRetry)
     }
 }
 
 
 /** A destructive action waiting for the user to confirm it. */
-class ConfirmRequest(val title: String, val message: String, val confirmLabel: String, val action: () -> Unit)
+class ConfirmRequest(
+    val title: String,
+    val message: String,
+    val confirmLabel: String,
+    val action: () -> Unit,
+)
 
 /** Asks before anything is deleted; nothing happens unless the user taps the red button. */
 @Composable
@@ -754,37 +788,12 @@ fun ConfirmDialog(request: ConfirmRequest?, onDismiss: () -> Unit) {
     request ?: return
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Aurora.Sheet,
+        containerColor = tuneColors.surface,
         title = { Text(request.title, style = MaterialTheme.typography.headlineSmall) },
-        text = { Text(request.message, style = MaterialTheme.typography.bodyLarge, color = Aurora.Muted) },
+        text = { Text(request.message, style = MaterialTheme.typography.bodyLarge, color = tuneColors.muted) },
         confirmButton = {
-            TextButton(onClick = { request.action(); onDismiss() }) { Text(request.confirmLabel, color = Aurora.Pink) }
+            TextButton(onClick = { request.action(); onDismiss() }) { Text(request.confirmLabel, color = tuneColors.danger) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Aurora.Text) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = tuneColors.text) } },
     )
-}
-
-private const val REPO_URL = "https://github.com/Xenomorph27/tunehub"
-
-/** "Made by Barnak · Open Source" at the bottom of every page; "Open Source" opens the repo. */
-@Composable
-fun CreditFooter(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(top = 28.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Made by Barnak  ·  ", style = MaterialTheme.typography.bodySmall, color = Aurora.Muted)
-        Text(
-            "Open Source",
-            style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
-            color = Aurora.Lilac,
-            modifier = Modifier.clickable {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(REPO_URL))) }
-            },
-        )
-    }
 }

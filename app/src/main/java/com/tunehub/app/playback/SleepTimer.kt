@@ -2,10 +2,13 @@ package com.tunehub.app.playback
 
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /** Pauses playback after a delay, or when the current song ends. */
+@OptIn(UnstableApi::class)
 object SleepTimer {
     sealed interface State {
         data object Off : State

@@ -1,36 +1,41 @@
 package com.tunehub.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tunehub.app.TuneHubApp
 import com.tunehub.app.playback.AudioFx
+import java.text.NumberFormat
 
 @Composable
 fun EqualizerScreen(onBack: () -> Unit) {
@@ -38,46 +43,39 @@ fun EqualizerScreen(onBack: () -> Unit) {
     val data by library.data.collectAsStateWithLifecycle()
     val bands by AudioFx.bands.collectAsStateWithLifecycle()
     val eq = data.eq
+    val frequencyFormat = remember { NumberFormat.getNumberInstance() }
 
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 20.dp)) {
-            GlassIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
-            Text("Sound", style = MaterialTheme.typography.headlineMedium, modifier = Modifier
-                .weight(1f)
-                .padding(start = 14.dp))
-        }
+        SettingsHeading("Sound", onBack)
 
         // UltraTune: one tap for the boosted sound, overriding the manual settings below
-        Row(
+        Column(
             Modifier
                 .padding(20.dp)
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(28.dp), fill = Aurora.GlassStrong)
-                .background(
-                    if (eq.ultra) Brush.linearGradient(listOf(Aurora.Violet.copy(alpha = 0.55f), Aurora.Cyan.copy(alpha = 0.35f)))
-                    else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                )
-                .clickable { library.updateEq { it.copy(ultra = !it.ultra) } }
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .panel(RoundedCornerShape(18.dp), fill = tuneColors.raised)
+                .toggleable(value = eq.ultra, role = Role.Switch) { on -> library.updateEq { it.copy(ultra = on) } }
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(Modifier.weight(1f)) {
-                GradientText("UltraTune", MaterialTheme.typography.headlineSmall)
-                Text(
-                    "Deep bass, clear vocals, crisp highs, wide 3D stage and extra loudness, tuned to stay clean.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Aurora.Muted,
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("UltraTune", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = eq.ultra,
+                    onCheckedChange = null,
+                    colors = SwitchDefaults.colors(checkedTrackColor = tuneColors.accent, checkedThumbColor = tuneColors.onAccent),
                 )
             }
-            Switch(
-                checked = eq.ultra,
-                onCheckedChange = { on -> library.updateEq { it.copy(ultra = on) } },
-                colors = SwitchDefaults.colors(checkedTrackColor = Aurora.Cyan, checkedThumbColor = Aurora.Ink),
+            Text(
+                "A preset with deeper bass, brighter vocals and a wider soundstage.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = tuneColors.muted,
             )
+            ConsoleMeter(if (eq.ultra) 1f else 0f, Modifier.fillMaxWidth())
         }
 
         val manualEnabled = !eq.ultra
@@ -85,23 +83,21 @@ fun EqualizerScreen(onBack: () -> Unit) {
             Modifier
                 .padding(horizontal = 20.dp)
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(28.dp))
-                .padding(18.dp),
+                .panel(RoundedCornerShape(18.dp))
+                .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Equalizer", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        if (manualEnabled) "Shape the sound yourself" else "UltraTune is on: turn it off to use these",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Aurora.Muted,
-                    )
+                    if (!manualEnabled) {
+                        Text("Turn off UltraTune to adjust the EQ.", style = MaterialTheme.typography.bodySmall, color = tuneColors.muted)
+                    }
                 }
                 Switch(
                     checked = eq.enabled,
                     enabled = manualEnabled,
                     onCheckedChange = { on -> library.updateEq { it.copy(enabled = on) } },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Aurora.Cyan, checkedThumbColor = Aurora.Ink),
+                    colors = SwitchDefaults.colors(checkedTrackColor = tuneColors.accent, checkedThumbColor = tuneColors.onAccent),
                 )
             }
 
@@ -110,7 +106,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
                 Text(
                     "Play a song once to load your phone's equalizer.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Aurora.Muted,
+                    color = tuneColors.muted,
                     modifier = Modifier.padding(top = 12.dp),
                 )
             } else {
@@ -121,7 +117,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     AudioFx.presets.forEach { name ->
-                        GlassChip(name, selected = eq.preset == name) {
+                        ConsoleKey(name, Modifier.semantics { selected = eq.preset == name }, primary = eq.preset == name, enabled = manualEnabled) {
                             library.updateEq { it.copy(preset = name, enabled = true, bands = AudioFx.curve(name, info)) }
                         }
                     }
@@ -129,7 +125,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
                 info.centersHz.forEachIndexed { i, hz ->
                     val level = eq.bands.getOrElse(i) { 0 }
                     SliderRow(
-                        label = if (hz >= 1000) "${hz / 1000} kHz" else "$hz Hz",
+                        label = if (hz >= 1000) "${frequencyFormat.format(hz / 1000.0)} kHz" else "$hz Hz",
                         value = level.toFloat(),
                         range = info.minMb.toFloat()..info.maxMb.toFloat(),
                         valueText = "%+.1f dB".format(level / 100f),
@@ -149,8 +145,8 @@ fun EqualizerScreen(onBack: () -> Unit) {
             Modifier
                 .padding(20.dp)
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(28.dp))
-                .padding(18.dp),
+                .panel(RoundedCornerShape(18.dp))
+                .padding(16.dp),
         ) {
             Text("Effects", style = MaterialTheme.typography.titleLarge)
             val on = manualEnabled && eq.enabled
@@ -165,15 +161,15 @@ fun EqualizerScreen(onBack: () -> Unit) {
             }
         }
         Text(
-            "Effects apply to TuneHub only. Some phones don't support every effect; unsupported ones do nothing.",
+            "Effects apply to TuneHub. Availability varies by device.",
             style = MaterialTheme.typography.bodySmall,
-            color = Aurora.Muted,
+            color = tuneColors.muted,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
         )
-        CreditFooter()
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SliderRow(
     label: String,
@@ -183,21 +179,31 @@ private fun SliderRow(
     enabled: Boolean,
     onChange: (Float) -> Unit,
 ) {
-    Column(Modifier.padding(top = 6.dp)) {
+    val current = value.coerceIn(range)
+    val span = range.endInclusive - range.start
+    val fill = if (span > 0f) (current - range.start) / span else 0f
+    val zero = if (span > 0f) (0f.coerceIn(range) - range.start) / span else 0f
+    Column(Modifier.padding(top = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Text(valueText, style = MaterialTheme.typography.bodySmall, color = Aurora.Lilac, modifier = Modifier.width(76.dp))
+            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).padding(end = 8.dp))
+            ConsoleReadout(valueText, Modifier.widthIn(min = 86.dp))
         }
         Slider(
-            value = value.coerceIn(range),
+            value = current,
             onValueChange = onChange,
             valueRange = range,
             enabled = enabled,
-            colors = SliderDefaults.colors(
-                thumbColor = Aurora.Cyan,
-                activeTrackColor = Aurora.Cyan,
-                inactiveTrackColor = Color.White.copy(alpha = 0.15f),
-            ),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentDescription = label
+                stateDescription = valueText
+            },
+            thumb = {
+                Box(Modifier.size(12.dp, 22.dp).background(
+                    if (enabled) tuneColors.accentText else tuneColors.track,
+                    RoundedCornerShape(3.dp),
+                ))
+            },
+            track = { ConsoleMeter(fill, Modifier.fillMaxWidth(), origin = zero, enabled = enabled) },
         )
     }
 }

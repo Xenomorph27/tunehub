@@ -16,7 +16,8 @@ concurrency:
 env:
   # SHA-256 of the certificate every published TuneHub APK is signed with. A build signed with
   # anything else could not update existing installs, so it must never be published.
-  RELEASE_CERT_SHA256: 81c410657500b1baaa34c033b39e0a30d0f2adc053e1fcd75354848c415eb2c4
+  RELEASE_CERT_SHA256: ${{ vars.RELEASE_CERT_SHA256 }}
+  TUNEHUB_APPLICATION_ID: ${{ vars.TUNEHUB_APPLICATION_ID }}
 
 jobs:
   build:
@@ -56,6 +57,18 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          if [ "$GITHUB_REPOSITORY" = "Xenomorph27/tunehub" ]; then
+            RELEASE_CERT_SHA256=81c410657500b1baaa34c033b39e0a30d0f2adc053e1fcd75354848c415eb2c4
+            echo "TUNEHUB_APPLICATION_ID=com.spitify.app" >> "$GITHUB_ENV"
+          elif [[ ! "$TUNEHUB_APPLICATION_ID" =~ ^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$ ]] || [ "$TUNEHUB_APPLICATION_ID" = "com.spitify.app" ]; then
+            echo "::error::Set TUNEHUB_APPLICATION_ID to a unique package name for this fork"
+            exit 1
+          fi
+          if [[ ! "$RELEASE_CERT_SHA256" =~ ^[[:xdigit:]]{64}$ ]]; then
+            echo "::error::Set RELEASE_CERT_SHA256 to the signing certificate SHA-256 digest without colons"
+            exit 1
+          fi
+          echo "RELEASE_CERT_SHA256=${RELEASE_CERT_SHA256,,}" >> "$GITHUB_ENV"
           # fail closed: never fall back to a throwaway debug key for a published build
           for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [ -z "${!v}" ]; then echo "::error::Signing secret $v is missing"; exit 1; fi

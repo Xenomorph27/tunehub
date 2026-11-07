@@ -3,6 +3,7 @@
 # Usage: ci/ui-check.sh path/to/app.apk
 set -u
 APK="$1"
+APP_ID="${TUNEHUB_APPLICATION_ID:-com.tunehub.app}"
 OUT=ui-shots
 mkdir -p "$OUT"
 
@@ -47,11 +48,11 @@ sleep 60
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null
 adb install -r "$APK" || { echo "::error::APK failed to install"; exit 1; }
 adb logcat -c
-adb shell am start -n com.spitify.app/com.tunehub.app.ui.MainActivity
+adb shell am start -n "$APP_ID/com.tunehub.app.ui.MainActivity"
 sleep 10
 shot 01-home
 
-tap text "Search songs, artists, albums" || tap desc "Search"; sleep 3
+tap desc "Search"; sleep 3
 shot 02-search-home
 
 tap class "android.widget.EditText"; sleep 1
@@ -78,18 +79,12 @@ shot 09-album
 tap desc "Play"; sleep 12
 shot 10-after-play
 
-# the mini player floats just above the nav pill: tap it relative to the Home tab
-y=""
-for _ in 1 2 3; do
-  dump && y=$(python3 ci/find_node.py /tmp/ui.xml desc "Home" | cut -d' ' -f2) && break
-  sleep 2
-done
-[ -n "$y" ] && adb shell input tap 300 $((y - 200)) && echo "opened now playing"
+tap desc "Open now playing"
 sleep 5
 shot 11-now-playing
-adb shell input swipe 540 1900 540 600 400; sleep 4
+tap text "Lyrics"; sleep 4
 shot 12-now-playing-lyrics
-adb shell input swipe 540 600 540 1900 300; sleep 2
+tap desc "Close lyrics"; sleep 2
 tap desc "Close"; sleep 2
 
 tap desc "Library"; sleep 3
@@ -114,7 +109,7 @@ shot 18-import
 
 adb logcat -d > "$OUT/logcat.txt"
 # only crashes of TuneHub itself count (the emulator's own apps sometimes crash)
-if grep -A3 "FATAL EXCEPTION" "$OUT/logcat.txt" | grep -q "Process: com.spitify.app"; then
+if grep -A3 "FATAL EXCEPTION" "$OUT/logcat.txt" | grep -Fq "Process: $APP_ID"; then
   echo "::error::TuneHub crashed during the UI check"
   grep -A40 "FATAL EXCEPTION" "$OUT/logcat.txt" | head -80
   exit 1

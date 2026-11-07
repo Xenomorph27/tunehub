@@ -3,6 +3,7 @@ package com.tunehub.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
@@ -18,10 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,15 +62,15 @@ fun LibraryScreen() {
 
     val pinned = buildList {
         if (filter == null || filter == LibFilter.Playlists) {
-            add(LibEntry("liked", "Liked Songs", "Playlist • ${data.liked.size} songs", null, Long.MAX_VALUE, { LikedCover(58.dp) }) { nav.open(Route.Liked) })
+            add(LibEntry("liked", "Liked Songs", "Playlist • ${songCountLabel(data.liked.size)}", null, Long.MAX_VALUE, { LikedCover(58.dp) }) { nav.open(Route.Liked) })
         }
-        if ((filter == null || filter == LibFilter.Downloaded) && (data.downloads.isNotEmpty() || filter == LibFilter.Downloaded)) {
-            add(LibEntry("dl", "Downloads", "${data.downloads.size} songs", null, Long.MAX_VALUE, { DownloadsCover(58.dp) }) { nav.open(Route.Downloads) })
+        if (filter == null || filter == LibFilter.Downloaded) {
+            add(LibEntry("dl", "Downloads", songCountLabel(data.downloads.size), null, Long.MAX_VALUE, { DownloadsCover(58.dp) }) { nav.open(Route.Downloads) })
         }
     }
     val entries = buildList {
         data.playlists.forEach { p ->
-            add(LibEntry("p-" + p.id, p.name, "Playlist • ${p.songs.size} songs", LibFilter.Playlists, p.addedAt, { PlaylistCover(p.songs, 58.dp) }) {
+            add(LibEntry("p-" + p.id, p.name, "Playlist • ${songCountLabel(p.songs.size)}", LibFilter.Playlists, p.addedAt, { PlaylistCover(p.songs, 58.dp) }) {
                 nav.open(Route.LocalPlaylist(p.id))
             })
         }
@@ -95,10 +94,10 @@ fun LibraryScreen() {
                     .padding(start = 20.dp, top = 14.dp, end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Your Library", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-                GlassIconButton(AppIcons.Download, "Import playlist") { nav.open(Route.Import) }
+                BrowseTitle("Library", Modifier.weight(1f))
+                PanelIconButton(AppIcons.Download, "Import playlist") { nav.open(Route.Import) }
                 Spacer(Modifier.width(8.dp))
-                GlassIconButton(Icons.Default.Add, "Create playlist") { creating = true }
+                PanelIconButton(Icons.Default.Add, "Create playlist") { creating = true }
             }
         }
         item {
@@ -108,24 +107,41 @@ fun LibraryScreen() {
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                LibFilter.entries.forEach { f ->
-                    GlassChip(f.label, selected = filter == f) { filter = if (filter == f) null else f }
-                }
+                BrowseChip("All", selected = filter == null) { filter = null }
+                LibFilter.entries.forEach { f -> BrowseChip(f.label, selected = filter == f) { filter = f } }
             }
         }
-        item {
+        items(pinned, key = { it.key }) { e ->
+            BrowseRow(title = e.title, subtitle = e.subtitle, thumb = null, art = e.art, showChevron = true, onClick = e.open)
+            HorizontalDivider(Modifier.padding(start = 92.dp, end = 20.dp), color = tuneColors.rule)
+        }
+        if (entries.isNotEmpty()) item {
             Row(
                 Modifier
                     .clickable { sort = if (sort == LibSort.Recent) LibSort.Alpha else LibSort.Recent }
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(AppIcons.Sort, null, modifier = Modifier.size(16.dp))
-                Text(sort.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+                Text(sort.label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp))
             }
         }
-        items(pinned + entries, key = { it.key }) { e ->
-            BrowseRow(title = e.title, subtitle = e.subtitle, thumb = null, art = e.art, onClick = e.open)
+        items(entries, key = { it.key }) { e ->
+            BrowseRow(title = e.title, subtitle = e.subtitle, thumb = null, art = e.art, showChevron = true, onClick = e.open)
+            HorizontalDivider(Modifier.padding(start = 92.dp, end = 20.dp), color = tuneColors.rule)
+        }
+        if (entries.isEmpty() && filter == null && data.liked.isEmpty() && data.downloads.isEmpty()) {
+            item {
+                Column(
+                    Modifier.padding(horizontal = 20.dp, vertical = 16.dp).fillMaxWidth()
+                        .panel(RoundedCornerShape(12.dp)).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Bring over a playlist", style = MaterialTheme.typography.titleMedium)
+                    Text("Import from a link or a file.", style = MaterialTheme.typography.bodyMedium, color = tuneColors.muted)
+                    ConsoleKey("Import a playlist", primary = true) { nav.open(Route.Import) }
+                }
+            }
         }
         if (entries.isEmpty() && filter != null && filter != LibFilter.Downloaded) {
             item {
@@ -138,7 +154,6 @@ fun LibraryScreen() {
                 )
             }
         }
-        item { CreditFooter() }
     }
 
     if (creating) {

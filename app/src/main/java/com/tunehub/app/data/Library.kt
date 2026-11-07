@@ -186,6 +186,12 @@ class Library(dir: File) {
 
     fun deletePlaylist(id: String) = update { d -> d.copy(playlists = d.playlists.filterNot { it.id == id }) }
 
+    internal fun recordPlaylistPlay(id: String) = update { d ->
+        d.copy(playlists = d.playlists.map { playlist ->
+            if (playlist.id == id) playlist.copy(playCount = playlist.playCount + 1, lastPlayedAt = now()) else playlist
+        })
+    }
+
     fun addToPlaylist(playlistId: String, song: Song) = updatePlaylist(playlistId) { p ->
         if (p.songs.any { it.id == song.id }) p else p.copy(songs = p.songs + song)
     }

@@ -34,9 +34,9 @@ device. There is no backend, no account and no analytics.
 ┌──────────────────────────── UI process (one process for everything) ───────────────────────────┐
 │                                                                                                 │
 │  MainActivity ── AppRoot (Compose)                                                              │
-│     ├─ AuroraBackground (glow tinted by current artwork)                                        │
+│     ├─ PaperBackground (follows the system appearance)                                        │
 │     ├─ screen for Navigator.current route (Home / Search / Library / Artist / Album / …)        │
-│     ├─ MiniPlayer + PillNav (floating)                                                          │
+│     ├─ MiniPlayer + BottomTabs                                                          │
 │     ├─ NowPlayingScreen (slide-up overlay)                                                      │
 │     └─ SongActionsSheet (single global bottom sheet)                                            │
 │           │                         ▲                                                           │
@@ -102,18 +102,18 @@ deliberate but worth knowing:
 
 | File | Responsibility |
 |---|---|
-| `MainActivity.kt` | Edge-to-edge activity. Connects / disconnects `PlayerConnection` in onStart / onStop. Handles `ACTION_SEND` (extracts a video id and starts a radio). `AppRoot`: Navigator, global song-menu state, CompositionLocals (`LocalNav`, `LocalSongMenu`, `LocalContentColor` = light text, because there is no Scaffold), aurora background tinted by the current artwork, the screen for the current route, floating `MiniPlayer` + `PillNav`, the Now Playing overlay, playback error toasts, and `BackHandler`. Content is padded at the bottom (96 or 168 dp) so lists end above the floating bars. |
-| `Nav.kt` | `Route` sealed interface: Liked, Downloads, Settings, Equalizer, LocalPlaylist(id), Album(AlbumRef), Artist(ArtistRef), Genre(name). `Navigator` keeps one back stack per tab (3 tabs), tracks `nowPlayingOpen`, and `back()` closes Now Playing → pops the stack → goes to Home. |
+| `MainActivity.kt` | Edge-to-edge activity. Connects / disconnects `PlayerConnection` in onStart / onStop. Handles `ACTION_SEND` (extracts a video id and starts a radio). `AppRoot`: Navigator, global song-menu state, CompositionLocals (`LocalNav`, `LocalSongMenu`, `LocalContentColor` = theme text), the paper background, the current route, the bottom dock, the Now Playing overlay, playback error toasts, and `BackHandler`. Screen content reserves the measured height of the bottom dock. |
+| `Nav.kt` | `Route` includes Recently Played, Liked Songs, Downloads, Settings, Equalizer, imports, playlists, albums, artists, and genres. `Navigator` keeps a back stack per tab and restores it after recreation. |
 | `PlayerConnection.kt` | Singleton wrapping `MediaController`, mirrored into Compose state (current song, isPlaying, buffering, queue, index, shuffle, repeat, duration, error). Commands: play / playNext / enqueue / startRadio / togglePlay / seek / jumpTo / move / removeAt / clearUpcoming / shuffle / repeat / setHiRes. `withController` queues one pending action while the controller connects. |
-| `Theme.kt` | Aurora palette (`Aurora.Ink/Violet/Cyan/Pink/…`, accent gradients), bundled variable fonts (Outfit for body, Space Grotesk for display), dark color scheme, typography. `AppIcons`: hand-written vector paths, to avoid the ~10 MB material-icons-extended. |
-| `Glass.kt` | Design primitives: `Modifier.glass()`, `AuroraBackground` (radial-gradient glows, no GPU blur), `GlassIconButton`, `GradientCircleButton`, `GlassChip`, `GradientText`, `WaveformSeekBar` (bars seeded by song id, tap / drag to seek), `ProgressRing`. |
+| `Theme.kt` | Paper and charcoal palettes, system appearance, Material color roles, and the bundled Source Serif 4, Inter, and Silkscreen fonts. `AppIcons`: hand-written vector paths, to avoid the ~10 MB material-icons-extended. |
+| `Controls.kt` | Design primitives: `Modifier.panel()`, `PaperBackground`, `PanelIconButton`, `AccentCircleButton`, `FilterPill`, and `SegmentedSeekBar` (tap, drag, or accessibility seek). |
 | `Components.kt` | Shared pieces: `Artwork` (sizes the thumbnail to its dp size), `PlaylistCover` (2×2 collage), Liked / Downloads covers, `rememberArtColor` (Palette vibrant color, cached), `prefetchOnTouch`, `SongRow` (long-press or ⋮ opens the menu), `SongActionsSheet` (like, add to playlist with inline picker, play next, queue, radio, download, go to artist, share, remove from playlist), `AlbumCard`, `ArtistCircle`, `BrowseRow`, `BackPage` (LazyColumn + pinned back button), `CollectionHeader`, `PlayCircle`, `DownloadAllButton`, dialogs, section titles, loading / error boxes. |
-| `HomeScreen.kt` | `HomeViewModel` (trending kiosk, quick picks = related songs of the last played). Screen: wordmark + settings, search pill (goes to the Search tab), Continue / Now playing hero card, mood chips (→ Genre), shortcut grid (Liked, playlists, saved albums, artists, Downloads), "Made for you" radio cards (one per distinct artist in recents + likes), Recently played, Quick picks, Your artists, Trending now. |
-| `SearchScreen.kt` | `SearchViewModel`: debounced suggestions (250 ms), filter (`SearchFilter` enum), "All" via `searchAll`, paged single-filter search with infinite scroll, dedupe by key. Screen: glass search field (hides the keyboard on submit), filter chips, suggestions, search home (recent searches + genre tiles), results (`topResults` for All: top-result card, songs, artist / album / playlist rows). `GenreScreen` reuses a keyed SearchViewModel with "<genre> songs". Tapping a song starts a radio. |
+| `HomeScreen.kt` | Home opens with shortcuts to Liked Songs, Recently Played, and other local collections. The spotlight leads into personalized radio, Quick Picks, and Trending. `HomeViewModel` reads cached trending songs off the UI thread and refreshes them after 30 minutes on the next launch. |
+| `SearchScreen.kt` | `SearchViewModel`: debounced suggestions (250 ms), filter (`SearchFilter` enum), "All" via `searchAll`, paged single-filter search with infinite scroll, dedupe by key. Screen: matte search field (hides the keyboard on submit), filter chips, suggestions, search home (recent searches + genre tiles), results (`topResults` for All: top-result card, songs, artist / album / playlist rows). `GenreScreen` reuses a keyed SearchViewModel with "<genre> songs". Tapping a song starts a radio. |
 | `ArtistScreen.kt` | `ArtistViewModel` → `YouTube.artistPage`. Banner fading into the aurora, ringed avatar, name, Follow chip, shuffle / play, Popular (numbered), Discography row, Music videos. |
 | `CollectionScreens.kt` | `AlbumViewModel` + `AlbumScreen` (YouTube album or playlist: save to library, download all, numbered tracks without art for albums), `LikedScreen`, `DownloadsScreen` (overall progress bar), `LocalPlaylistScreen` (rename, delete, remove songs via the menu). |
 | `LibraryScreen.kt` | Filter chips (Playlists, Albums, Artists, Downloaded), sort (recently added / A–Z), pinned Liked Songs and Downloads, create-playlist dialog. |
-| `NowPlaying.kt` | `MiniPlayer` (glass bar, art-tinted, swipe to skip, progress line). `NowPlayingScreen`: aurora tinted by the artwork, round cover in a `ProgressRing`, swipe the cover to skip, title / artist (artist opens the artist page), like, `WaveformSeekBar`, control dock (shuffle, prev, play/pause with buffering spinner, next, repeat), chips (Lyrics, Hi-Res, UltraTune, Queue, Sleep, Share, quality badge), lyrics card below the fold, full-screen synced lyrics (auto-scroll, tap a line to seek), sleep and queue sheets. |
+| `NowPlaying.kt` | `MiniPlayer` has previous, play/pause, and next controls plus swipe to skip. `NowPlayingScreen` shows the resolved codec and bitrate in its header. Four playback options surround the central Share button. The header also opens full-screen lyrics with loading and retry states, auto-scroll, and tap to seek. |
 | `EqualizerScreen.kt` | UltraTune card, equalizer on/off, presets, per-band sliders (from `AudioFx.bands`), bass / 3D / loudness sliders. Disabled while UltraTune is on. |
 | `SettingsScreen.kt` | Autoplay, Hi-Res audio, Equalizer & UltraTune (→ Equalizer), storage info, clear history / searches, version, link to the latest release. |
 
@@ -122,12 +122,29 @@ deliberate but worth knowing:
 | File | Responsibility |
 |---|---|
 | `res/font/outfit.ttf`, `space_grotesk.ttf` | Variable fonts (OFL). |
-| `res/drawable/ic_launcher_foreground.xml`, `mipmap-anydpi-v26/ic_launcher.xml` | Adaptive and monochrome launcher icon (gradient equalizer bars). |
+| `res/drawable/ic_launcher_foreground.xml`, `ic_tunehub_mono.xml` | Amber-to-terracotta play mark and its monochrome version for themed icons and playback notifications. The GitHub PNG and SVG are in `docs/`. |
 | `app/build.gradle.kts` | Version code and name from the `BUILD_NUMBER` env var. Release: R8 minify + shrinkResources + `proguard-rules.pro`, signed with the CI keystore when `TUNEHUB_KEYSTORE*` env vars exist (else the debug key). Core library desugaring (NewPipe needs java.time / nio). Explicit `nanojson` dependency (same commit as the extractor) for the fast path. |
 | `app/proguard-rules.pro` | NewPipe's rules (Rhino and its script engine, protobuf, timeago patterns), OkHttp warnings, `-dontobfuscate`, kotlinx.serialization keeps for our models. |
 | `app/src/test/.../ExtractionTest.kt` | Live smoke tests against YouTube Music and LRCLIB: searchAll, artist page, album page, lyrics, stream fetch. The stream test fails on CI because YouTube blocks datacenter IPs, so CI marks the step continue-on-error. |
 | `.github/workflows/build.yml` | Every push to main: JDK 17, Gradle 8.11.1, `BUILD_NUMBER = run_number + 15`, decode keystore from secrets, `assembleRelease`, smoke tests (non-blocking), upload artifact, `gh release create build-N tunehub.apk --latest`. One release per build so download counts accumulate. |
 | `.github/workflows/ui-check.yml` + `ci/ui-check.sh` + `ci/find_node.py` | Manual: builds the release APK, boots an API 34 emulator, drives search → artist → album → play → Now Playing → library → new playlist → settings → equalizer with adb + uiautomator (retries dumps, dismisses system ANR dialogs), saves screenshots + logcat, flags `FATAL EXCEPTION`. |
+
+### TuneHub design
+
+TuneHub pairs editorial typography with warm paper and an amber playback display.
+Source Serif 4 is used for headings and lyrics, Inter for controls and metadata,
+and Silkscreen for the Home, Search, and Library labels and the LCD. The fonts and their SIL Open Font
+License notices ship with the app.
+
+The light palette starts at paper #FAF9F5 and the dark palette at charcoal #262624.
+Terracotta #D97757 marks primary controls, with a separate contrast-adjusted text color in
+each theme. The player uses amber #F0B35A on ink #1F1E1D. A shallow shadow separates the
+artwork frame from the page. Navigation colors, the player transition, lyric highlights,
+and mini-player track changes use short animations. The cover follows a swipe to skip tracks.
+
+The Home spotlight uses the current track, listening history, or TuneHub's trending feed.
+The design uses TuneHub's artwork and data throughout. The app follows Android's system
+appearance, and the player scrolls on shorter screens and at larger text sizes.
 
 ## 4. Key flows
 

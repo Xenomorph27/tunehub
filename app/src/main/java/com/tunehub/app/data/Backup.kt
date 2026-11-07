@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -57,7 +58,12 @@ fun mergeLibraries(current: LibraryData, incoming: LibraryData): LibraryData {
     fun <T, K> union(a: List<T>, b: List<T>, key: (T) -> K) = (a + b).distinctBy(key)
     val playlists = (current.playlists + incoming.playlists)
         .groupBy { it.id }
-        .map { (_, versions) -> versions.maxBy { it.updatedAt } }
+        .map { (_, versions) ->
+            versions.maxBy { it.updatedAt }.copy(
+                playCount = versions.maxOf { it.playCount },
+                lastPlayedAt = versions.maxOf { it.lastPlayedAt },
+            )
+        }
     return current.copy(
         liked = union(current.liked, incoming.liked) { it.id },
         playlists = playlists,
@@ -97,7 +103,7 @@ class Backups(private val context: Context, private val library: Library) {
             // skip the value loaded at startup; back up a few seconds after changes settle
             library.data.drop(1).debounce(3_000).collect { data ->
                 // an empty library (fresh install) must never replace a real backup
-                if (data.autoBackup && autoSupported && !data.isEmptyLibrary()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && data.autoBackup && !data.isEmptyLibrary()) {
                     runCatching { writeToDownloads(BackupCodec.encode(data)) }.onSuccess {
                         _lastBackupAt.value = System.currentTimeMillis()
                     }
@@ -121,6 +127,7 @@ class Backups(private val context: Context, private val library: Library) {
         return incoming.playlists.size
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun writeToDownloads(text: String) {
         val resolver = context.contentResolver
         // keep updating the same file; if it's gone (deleted, or made by an earlier install), make a new one

@@ -26,10 +26,12 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.tunehub.app.R
 import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.data.isValidVideoId
@@ -68,6 +70,9 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_tunehub_mono) },
+        )
 
         // The stream is resolved first, so the cache key names the exact audio file (rendition);
         // downloaded songs come back as file:// and skip the streaming cache entirely.
@@ -200,6 +205,16 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val listener = object : Player.Listener {
+        private var countedPlaylistStart: String? = null
+
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (!player.isPlaying) return
+            val start = player.currentMediaItem?.playlistStart() ?: return
+            if (start.token == countedPlaylistStart) return
+            countedPlaylistStart = start.token
+            TuneHubApp.library.recordPlaylistPlay(start.playlistId)
+        }
+
         override fun onAudioSessionIdChanged(audioSessionId: Int) = onAudioSession(audioSessionId)
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {

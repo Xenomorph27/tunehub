@@ -5,6 +5,8 @@ import com.tunehub.app.data.LibraryData
 import com.tunehub.app.data.LibraryStore
 import com.tunehub.app.data.LoadResult
 import com.tunehub.app.data.Song
+import com.tunehub.app.data.homePlaylists
+import com.tunehub.app.data.mergeLibraries
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,6 +24,30 @@ class LibraryStoreTest {
     @Test
     fun missingFileIsFirstRun() {
         assertEquals(LoadResult.Missing, LibraryStore(tmp.root).load())
+    }
+
+    @Test
+    fun homeRanksPlayedPlaylistsAndPersistsTheCounts() {
+        val library = Library(tmp.root)
+        val most = library.createPlaylist("Most played", listOf(song))
+        val second = library.createPlaylist("Second", listOf(song))
+        val unused = library.createPlaylist("Unused", listOf(song))
+        library.createPlaylist("Empty")
+        library.recordPlaylistPlay(second)
+        repeat(2) { library.recordPlaylistPlay(most) }
+        library.flushBlocking()
+
+        val saved = (LibraryStore(tmp.root).load() as LoadResult.Loaded).data
+        assertEquals(listOf(most, second), saved.playlists.homePlaylists().map { it.id })
+        assertEquals(0L, saved.playlists.single { it.id == unused }.playCount)
+        val edited = saved.playlists.single { it.id == most }.let {
+            it.copy(name = "Renamed", updatedAt = it.updatedAt + 1, playCount = 0, lastPlayedAt = 0)
+        }
+        val restored = mergeLibraries(saved, LibraryData(playlists = listOf(edited)))
+        val first = restored.playlists.homePlaylists().first()
+        assertEquals("Renamed", first.name)
+        assertEquals(2L, first.playCount)
+        assertTrue(first.lastPlayedAt > 0)
     }
 
     @Test

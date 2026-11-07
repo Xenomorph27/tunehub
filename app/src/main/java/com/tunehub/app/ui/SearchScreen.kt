@@ -4,8 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,18 +25,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -47,13 +46,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -197,16 +193,16 @@ fun itemKey(item: BrowseItem): String = when (item) {
     is BrowseItem.AlbumItem -> "l-" + item.album.url
 }
 
-// each genre tile gets a two-tone glow from the Aurora palette
+// Muted print accents keep the genre grid legible in both themes.
 private val genres = listOf(
-    "Bollywood" to (0xFFFF7A3D to 0xFFFF3FB4), "Punjabi" to (0xFFFFB547 to 0xFF7B4DFF),
-    "Lo-fi" to (0xFF6FF3FF to 0xFF3A1CFF), "Pop" to (0xFFFF3FB4 to 0xFF8F6BFF),
-    "Hip-Hop" to (0xFFFFB547 to 0xFFFF3F5E), "Chill" to (0xFF6FF3FF to 0xFF7B4DFF),
-    "Workout" to (0xFF9CFF57 to 0xFF00A8A8), "Romance" to (0xFFFF8FD6 to 0xFFFF3F5E),
-    "Party" to (0xFFC8B6FF to 0xFFFF3FB4), "Rock" to (0xFFFF5F3F to 0xFF2A1A5E),
-    "Indie" to (0xFF9CFF57 to 0xFF3A1CFF), "K-Pop" to (0xFFFF8FD6 to 0xFF6FF3FF),
-    "Focus" to (0xFF8F6BFF to 0xFF14104A), "Sad songs" to (0xFF5FB3FF to 0xFF1A1450),
-    "EDM" to (0xFF6FF3FF to 0xFFFF3FB4), "Retro" to (0xFFFFB547 to 0xFFB0398F),
+    "Bollywood" to 0xFFC57A55, "Punjabi" to 0xFFB18A4E,
+    "Lo-fi" to 0xFF6C938F, "Pop" to 0xFFAD718F,
+    "Hip-Hop" to 0xFFB77858, "Chill" to 0xFF698FA5,
+    "Workout" to 0xFF7D985D, "Romance" to 0xFFB37478,
+    "Party" to 0xFF977EA8, "Rock" to 0xFFB46455,
+    "Indie" to 0xFF84936B, "K-Pop" to 0xFFAC7796,
+    "Focus" to 0xFF827E9D, "Sad songs" to 0xFF7488A6,
+    "EDM" to 0xFF63958F, "Retro" to 0xFFB08B54,
 )
 
 @Composable
@@ -218,11 +214,7 @@ fun SearchScreen(vm: SearchViewModel) {
     val nav = LocalNav.current
 
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "Search",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 14.dp),
-        )
+        BrowseTitle("Search", Modifier.padding(start = 20.dp, top = 14.dp, bottom = 14.dp))
         TextField(
             value = vm.query,
             onValueChange = vm::onQueryChange,
@@ -234,21 +226,21 @@ fun SearchScreen(vm: SearchViewModel) {
                 }
             },
             singleLine = true,
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = TextFieldDefaults.colors(
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = Aurora.GlassStrong,
-                unfocusedContainerColor = Aurora.Glass,
-                focusedTextColor = Aurora.Text,
-                unfocusedTextColor = Aurora.Text,
-                focusedPlaceholderColor = Aurora.Muted,
-                unfocusedPlaceholderColor = Aurora.Muted,
-                focusedLeadingIconColor = Aurora.Cyan,
-                unfocusedLeadingIconColor = Aurora.Muted,
-                focusedTrailingIconColor = Aurora.Text,
-                unfocusedTrailingIconColor = Aurora.Text,
-                cursorColor = Aurora.Cyan,
+                focusedContainerColor = tuneColors.raised,
+                unfocusedContainerColor = tuneColors.surface,
+                focusedTextColor = tuneColors.text,
+                unfocusedTextColor = tuneColors.text,
+                focusedPlaceholderColor = tuneColors.muted,
+                unfocusedPlaceholderColor = tuneColors.muted,
+                focusedLeadingIconColor = tuneColors.accentText,
+                unfocusedLeadingIconColor = tuneColors.muted,
+                focusedTrailingIconColor = tuneColors.text,
+                unfocusedTrailingIconColor = tuneColors.text,
+                cursorColor = tuneColors.accentText,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { dismissKeyboard(); vm.submit() }),
@@ -282,7 +274,7 @@ private fun FilterChips(selected: SearchFilter, onSelect: (SearchFilter) -> Unit
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SearchFilter.entries.forEach { f -> GlassChip(f.label, selected = selected == f) { onSelect(f) } }
+        SearchFilter.entries.forEach { f -> BrowseChip(f.label, selected = selected == f) { onSelect(f) } }
     }
 }
 
@@ -294,29 +286,40 @@ private fun Suggestions(suggestions: List<String>, onPick: (String) -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clickable { onPick(s) }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                Text(s, modifier = Modifier.padding(start = 16.dp))
+                Text(s, modifier = Modifier.padding(start = 14.dp), style = MaterialTheme.typography.titleSmall)
             }
         }
     }
 }
 
 /** What the Search tab shows before you type: recent searches and genre tiles. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SearchHome(onSearch: (String) -> Unit, onGenre: (String) -> Unit) {
     var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
-    ConfirmDialog(confirm) { confirm = null }
+    HistoryDialog(confirm) { confirm = null }
     val library = TuneHubApp.library
     val data by library.data.collectAsStateWithLifecycle()
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BrowseSection("Browse genres") }
+        item {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                genres.forEach { (name, color) -> BrowseChip(name, marker = Color(color)) { onGenre(name) } }
+            }
+        }
         if (data.searches.isNotEmpty()) {
             item {
-                SectionTitle("Recent searches", action = "Clear") {
-                    confirm = ConfirmRequest("Clear search history?", "Your recent searches will be removed.", "Clear") {
+                BrowseSection("Recent searches", action = "Clear") {
+                    confirm = ConfirmRequest("Clear search history?", "Your recent searches will be removed.", "Clear history") {
                         library.clearSearches()
                     }
                 }
@@ -326,51 +329,20 @@ private fun SearchHome(onSearch: (String) -> Unit, onGenre: (String) -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clickable { onSearch(q) }
-                        .padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                        .padding(start = 20.dp, end = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(AppIcons.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                    Text(q, modifier = Modifier
+                    Text(q, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier
                         .weight(1f)
                         .padding(start = 16.dp))
                     IconButton(onClick = { library.removeSearch(q) }) {
-                        Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Close, "Remove $q", tint = tuneColors.muted, modifier = Modifier.size(18.dp))
                     }
                 }
+                HorizontalDivider(Modifier.padding(start = 56.dp, end = 20.dp), color = tuneColors.rule)
             }
         }
-        item { SectionTitle("Browse all") }
-        items(genres.chunked(2)) { pair ->
-            Row(
-                Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                pair.forEach { (name, colors) ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(104.dp)
-                            .glass(RoundedCornerShape(26.dp))
-                            .background(
-                                Brush.linearGradient(listOf(Color(colors.first).copy(alpha = 0.85f), Color(colors.second).copy(alpha = 0.55f)))
-                            )
-                            .clickable { onGenre(name) }
-                            .padding(14.dp),
-                    ) {
-                        Text(name, style = MaterialTheme.typography.titleLarge, color = Color.White)
-                        Icon(
-                            AppIcons.MusicNote, null,
-                            tint = Color.White.copy(alpha = 0.35f),
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(46.dp)
-                                .graphicsLayer { rotationZ = 18f },
-                        )
-                    }
-                }
-            }
-        }
-        item { CreditFooter() }
     }
 }
 
@@ -389,12 +361,14 @@ private fun SearchResults(vm: SearchViewModel) {
             vm.error != null && top == null && vm.items.isEmpty() -> item { ErrorBox(vm.error ?: "") { vm.submit(remember = false) } }
             vm.filter == SearchFilter.All && top != null -> topResults(top, vm.query, onMore = vm::selectFilter)
             else -> {
-                items(vm.items, key = ::itemKey) { item -> BrowseItemRow(item) }
+                items(vm.items, key = ::itemKey) { item ->
+                    BrowseItemRow(item)
+                    HorizontalDivider(Modifier.padding(start = 88.dp, end = 20.dp), color = tuneColors.rule)
+                }
                 if (!vm.loading && vm.items.isEmpty() && vm.error == null) item { EmptyHint("No results") }
             }
         }
         if (vm.loading) item { LoadingBox() }
-        item { CreditFooter() }
     }
 }
 
@@ -410,12 +384,14 @@ fun BrowseItemRow(item: BrowseItem) {
             thumb = item.artist.thumb,
             round = true,
             placeholder = Icons.Default.Person,
+            showChevron = true,
         ) { nav.open(Route.Artist(item.artist)) }
         is BrowseItem.AlbumItem -> BrowseRow(
             title = item.album.title,
             subtitle = listOf(if (item.album.isAlbum) "Album" else "Playlist", item.album.subtitle)
                 .filter { it.isNotBlank() }.joinToString(" • "),
             thumb = item.album.thumb,
+            showChevron = true,
         ) { nav.open(Route.Album(item.album)) }
     }
 }
@@ -428,17 +404,18 @@ fun LazyListScope.topResults(top: YouTube.TopResults, query: String, onMore: ((S
     val topSong = top.songs.firstOrNull()
 
     if (topArtist != null || topSong != null) {
-        item { SectionTitle("Top result") }
+        item { BrowseSection("Top result") }
         item { TopResultCard(topArtist, if (topArtist == null) topSong else null) }
     }
     if (top.songs.isNotEmpty()) {
-        item { SectionTitle("Songs", action = seeAll) { onMore?.invoke(SearchFilter.Songs) } }
+        item { BrowseSection("Songs", action = seeAll) { onMore?.invoke(SearchFilter.Songs) } }
         items(top.songs.take(5), key = { "ts-" + it.id }) { song ->
             SongRow(song, onClick = { PlayerConnection.startRadio(song) })
+            HorizontalDivider(Modifier.padding(start = 88.dp, end = 20.dp), color = tuneColors.rule)
         }
     }
     if (top.artists.isNotEmpty()) {
-        item { SectionTitle("Artists", action = seeAll) { onMore?.invoke(SearchFilter.Artists) } }
+        item { BrowseSection("Artists", action = seeAll) { onMore?.invoke(SearchFilter.Artists) } }
         item {
             val nav = LocalNav.current
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -447,7 +424,7 @@ fun LazyListScope.topResults(top: YouTube.TopResults, query: String, onMore: ((S
         }
     }
     if (top.albums.isNotEmpty()) {
-        item { SectionTitle("Albums", action = seeAll) { onMore?.invoke(SearchFilter.Albums) } }
+        item { BrowseSection("Albums", action = seeAll) { onMore?.invoke(SearchFilter.Albums) } }
         item {
             val nav = LocalNav.current
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -456,7 +433,7 @@ fun LazyListScope.topResults(top: YouTube.TopResults, query: String, onMore: ((S
         }
     }
     if (top.playlists.isNotEmpty()) {
-        item { SectionTitle("Playlists", action = seeAll) { onMore?.invoke(SearchFilter.Playlists) } }
+        item { BrowseSection("Playlists", action = seeAll) { onMore?.invoke(SearchFilter.Playlists) } }
         item {
             val nav = LocalNav.current
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -477,24 +454,25 @@ private fun TopResultCard(artist: ArtistRef?, song: Song?) {
         Modifier
             .padding(horizontal = 20.dp)
             .fillMaxWidth()
-            .glass(RoundedCornerShape(30.dp), fill = Aurora.GlassStrong)
-            .background(Brush.horizontalGradient(listOf(glow.copy(alpha = 0.3f), Color.Transparent)))
+            .panel(RoundedCornerShape(12.dp), fill = tuneColors.surface)
+            .background(Brush.horizontalGradient(listOf(glow.copy(alpha = 0.10f), Color.Transparent)))
             .clickable {
                 if (artist != null) nav.open(Route.Artist(artist)) else song?.let(PlayerConnection::startRadio)
             }
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Artwork(
-            thumb, 96.dp,
-            corner = if (artist != null) 48.dp else 22.dp,
+            thumb, 76.dp,
+            corner = if (artist != null) 38.dp else 10.dp,
             placeholder = if (artist != null) Icons.Default.Person else AppIcons.MusicNote,
         )
-        Column(Modifier.padding(start = 16.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Icon(if (artist == null) AppIcons.Play else Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = tuneColors.accentText)
     }
 }
 
@@ -504,15 +482,11 @@ fun GenreScreen(name: String, onBack: () -> Unit) {
     val vm: SearchViewModel = viewModel(key = "genre-$name")
     LaunchedEffect(name) { if (!vm.showingResults) vm.submit("$name songs", remember = false) }
     Column(Modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text(name, style = MaterialTheme.typography.headlineMedium)
-        }
+        SettingsHeading(name, onBack)
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
             val top = vm.top
             if (top != null) topResults(top, "", onMore = null) else if (vm.loading) item { LoadingBox() }
             vm.error?.let { e -> if (top == null) item { ErrorBox(e) { vm.submit("$name songs", remember = false) } } }
-            item { CreditFooter() }
         }
     }
 }

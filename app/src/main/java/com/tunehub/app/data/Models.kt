@@ -10,6 +10,7 @@ data class Song(
     val durationSec: Long = -1,
     val thumb: String? = null,
     val artistUrl: String? = null,
+    val preferredMusicSource: Boolean = false,
 )
 
 @Serializable
@@ -20,7 +21,15 @@ data class Playlist(
     val updatedAt: Long = 0,
     /** When it was created (0 for playlists saved before this field existed). */
     val addedAt: Long = 0,
+    val playCount: Long = 0,
+    val lastPlayedAt: Long = 0,
 )
+
+internal fun List<Playlist>.homePlaylists(): List<Playlist> = asSequence()
+    .filter { it.songs.isNotEmpty() }
+    .sortedWith(compareByDescending<Playlist> { it.playCount }.thenByDescending { it.lastPlayedAt }.thenByDescending { it.addedAt })
+    .take(2)
+    .toList()
 
 /** A YouTube Music artist (a YouTube channel). */
 @Serializable
