@@ -10,8 +10,6 @@ Search anything, tap play, lock your phone. No ads, no account, no subscription.
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-6FF3FF?logo=android)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FF3FB4)](LICENSE)
 
-<img src="docs/screenshots/" width="23%" alt="Home">
-
 </div>
 
 ## Install
@@ -32,7 +30,7 @@ use **Settings → Export backup** there, then **Settings → Restore from backu
 
 - **Search with filters**: All, Songs, Artists, Albums, Playlists, Videos. "All" gives a top
   result plus a few of each, with suggestions as you type, recent searches and genre tiles.
-- **Artist pages** with popular songs, discography and music videos. Follow your favourites.
+- **Artist pages** with popular songs and discography. Follow your favourites.
 - **Albums and playlists**: save them, play, shuffle or download the whole thing.
 - **Your library**: Liked Songs, Downloads, your own playlists, saved albums and followed
   artists, with filters and sorting. Everything stays on your phone.
