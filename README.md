@@ -10,10 +10,7 @@ Search anything, tap play, lock your phone. No ads, no account, no subscription.
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-6FF3FF?logo=android)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FF3FB4)](LICENSE)
 
-<img src="docs/screenshots/home.png" width="23%" alt="Home">&nbsp;
-<img src="docs/screenshots/search.png" width="23%" alt="Search">&nbsp;
-<img src="docs/screenshots/artist.png" width="23%" alt="Artist page">&nbsp;
-<img src="docs/screenshots/now-playing.png" width="23%" alt="Now playing">
+<img src="docs/screenshots/" width="23%" alt="Home">
 
 </div>
 
