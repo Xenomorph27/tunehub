@@ -11,6 +11,8 @@ captures/
 signing/
 *.jks
 *.keystore
+*.p12
+*.dpapi
 
 # scratch reference sources
 .ref/

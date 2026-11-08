@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 @Serializable
 sealed interface Route {
     @Serializable data object Liked : Route
+    @Serializable data object Recent : Route
     @Serializable data object Downloads : Route
     @Serializable data object Settings : Route
     @Serializable data object Equalizer : Route

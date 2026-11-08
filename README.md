@@ -7,46 +7,34 @@
 **Ad-free music for Android, from YouTube Music.**
 Search anything, tap play, lock your phone. No ads, no account, no subscription.
 
-[![Download APK](https://img.shields.io/github/v/release/Xenomorph27/tunehub?label=download&logo=android&color=7B4DFF)](https://github.com/Xenomorph27/tunehub/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/Xenomorph27/tunehub/build.yml?branch=main&label=build)](https://github.com/Xenomorph27/tunehub/actions/workflows/build.yml)
-[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FXenomorph27%2Ftunehub%2Fbadges%2Fdownloads.json&cacheSeconds=3600)](https://github.com/Xenomorph27/tunehub/releases)
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-6FF3FF?logo=android)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FF3FB4)](LICENSE)
-
-<img src="docs/screenshots/home.png" width="23%" alt="Home">&nbsp;
-<img src="docs/screenshots/search.png" width="23%" alt="Search">&nbsp;
-<img src="docs/screenshots/artist.png" width="23%" alt="Artist page">&nbsp;
-<img src="docs/screenshots/now-playing.png" width="23%" alt="Now playing">
 
 </div>
 
 ## Install
 
-1. On your Android phone, open **[Releases → latest](https://github.com/Xenomorph27/tunehub/releases/latest)**.
-2. Under **Assets**, tap **`tunehub.apk`** to download it.
-3. Open the file. If Android asks, allow installing apps from your browser, then tap **Install**.
-   Play Protect may warn because the app isn't from the Play Store: tap **More details → Install anyway**.
+1. Transfer the signed `TuneHub-1.1.apk` from the release package to your Android phone.
+2. Open the file, allow installation from your file manager if prompted, then tap **Install**.
 
-**Updating:** just install the new APK over the old one. Don't uninstall first: Android deletes
-an app's data when it's uninstalled. If you do reinstall, TuneHub keeps an automatic backup in
-`Download/TuneHub/` (Android 10+); tap **Restore backup** on the Home screen to bring your
-playlists and likes back.
+Updates to this release use the same package ID and signing key. To move from an older preview,
+use **Settings → Export backup** there, then **Settings → Restore from backup** here.
 
 ## What it does
 
 - **Fast start**: one request to YouTube before audio begins, and songs start loading the
   moment your finger touches them.
-- **Hi-Res toggle** right on the Now Playing screen, and **UltraTune**: one tap for deep bass,
+- **Sound quality menu** with Hi-Res and Data Saver on the Now Playing screen, and **UltraTune**: one tap for deep bass,
   clear vocals, crisp highs, a wide 3D stage and extra loudness.
 - **Built-in equalizer** with presets, per-band sliders, bass boost, 3D sound and loudness.
 
 - **Search with filters**: All, Songs, Artists, Albums, Playlists, Videos. "All" gives a top
   result plus a few of each, with suggestions as you type, recent searches and genre tiles.
-- **Artist pages** with popular songs, discography and music videos. Follow your favourites.
+- **Artist pages** with popular songs and discography. Follow your favourites.
 - **Albums and playlists**: save them, play, shuffle or download the whole thing.
 - **Your library**: Liked Songs, Downloads, your own playlists, saved albums and followed
   artists, with filters and sorting. Everything stays on your phone.
-- **Now Playing**: round cover inside a live progress ring, waveform seek bar, swipe the
+- **Now Playing**: framed square cover and an amber segmented seek bar, swipe the
   cover to skip, time-synced lyrics, sleep timer, queue editing and a stream-quality badge.
 - **Background playback** with lock-screen, notification and headphone controls.
 - **Radio and autoplay**: start a radio from any song; when your queue ends it keeps going
@@ -86,15 +74,14 @@ TuneHub skips YouTube's dynamic-range-compressed copies of the same audio. Lyric
 
 ## Build it yourself
 
-Open the project in Android Studio, or with the Android SDK and Gradle 8.11:
+Open the project in Android Studio or use JDK 17, Android SDK Platform 35, and Gradle 8.11.1.
 
 ```bash
-gradle assembleRelease
+gradle assembleRelease lintRelease testReleaseUnitTest --tests 'com.tunehub.app.unit.*'
 ```
 
-- Every push to `main` builds a signed APK in GitHub Actions and publishes it as the
-  **latest** release.
-- `gradle testReleaseUnitTest` runs live smoke tests against YouTube Music and LRCLIB.
+- See [release setup](docs/FORK-RELEASE.md) for signing and GitHub Actions configuration.
+- `gradle testReleaseUnitTest --tests com.tunehub.app.ExtractionTest` runs live smoke tests against YouTube Music and LRCLIB.
 - The **UI check** workflow (Actions tab → Run workflow) boots an emulator, clicks through
   the main screens and uploads screenshots.
 
@@ -102,6 +89,8 @@ gradle assembleRelease
 
 TuneHub is free software under the [GNU GPL v3](LICENSE), the same license as
 NewPipeExtractor, which it builds on.
+
+This build is based on [the original TuneHub project](https://github.com/Xenomorph27/tunehub).
 
 It's a personal project, not affiliated with YouTube or Google. Using it may go against
 YouTube's Terms of Service, so use it at your own discretion.

@@ -1,14 +1,15 @@
 package com.tunehub.app.ui
 
+import android.app.Application
+import android.content.Context
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,13 +20,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,58 +39,121 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.tunehub.app.TuneHubApp
+import com.tunehub.app.data.BrowseItem
 import com.tunehub.app.data.Song
-import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.data.YouTube
-import com.tunehub.app.data.isEmptyLibrary
+import com.tunehub.app.data.homePlaylists
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Calendar
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var quickPicks by mutableStateOf<List<Song>>(emptyList())
         private set
     var trending by mutableStateOf<List<Song>>(emptyList())
         private set
-    private var seedId: String? = null
+    private var historyIds = emptyList<String>()
+    private var quickPicksJob: Job? = null
 
     init {
         viewModelScope.launch {
-            trending = withContext(Dispatchers.IO) {
-                runCatching { YouTube.trendingMusic().take(20) }.getOrDefault(emptyList())
+            val locale = Locale.getDefault().toLanguageTag()
+            val cache = withContext(Dispatchers.IO) {
+                application.getSharedPreferences("home_feed", Context.MODE_PRIVATE)
             }
+            val (cached, fetchedAt) = withContext(Dispatchers.IO) {
+                val snapshot = cache.all
+                val songs = if (snapshot["locale"] == locale) {
+                    (snapshot["songs"] as? String)?.let { encoded ->
+                        runCatching { feedJson.decodeFromString(songList, encoded) }.getOrNull()
+                    }.orEmpty()
+                } else {
+                    emptyList()
+                }
+                songs to (snapshot["fetched_at"] as? Long ?: 0L)
+            }
+            trending = cached
+            val age = System.currentTimeMillis() - fetchedAt
+            if (cached.isNotEmpty() && age in 0 until feedMaxAge) return@launch
+
+            val latest = withContext(Dispatchers.IO) {
+                val songs = runCatching { YouTube.trendingMusic().rankMusic().take(20) }.getOrDefault(emptyList())
+                if (songs.isNotEmpty()) {
+                    cache.edit()
+                        .putString("locale", locale)
+                        .putString("songs", feedJson.encodeToString(songList, songs))
+                        .putLong("fetched_at", System.currentTimeMillis())
+                        .apply()
+                }
+                songs
+            }
+            if (latest.isNotEmpty()) trending = latest
         }
     }
 
-    /** Quick picks = songs YouTube relates to whatever you played last. */
-    fun loadFor(seed: Song) {
-        if (seed.id == seedId) return
-        seedId = seed.id
-        viewModelScope.launch {
-            val related = withContext(Dispatchers.IO) {
-                runCatching { StreamResolver.related(seed.id) }.getOrDefault(emptyList())
-            }
-            if (related.isNotEmpty()) quickPicks = related.distinctBy { it.id }.take(10)
+    /** Build Quick Picks from the YouTube Music song catalog of recently played artists. */
+    fun loadFor(recent: List<Song>) {
+        val ids = recent.map { it.id }
+        if (ids == historyIds) return
+        historyIds = ids
+        quickPicksJob?.cancel()
+        if (recent.isEmpty()) {
+            quickPicks = emptyList()
+            return
+        }
+
+        val played = ids.toSet()
+        quickPicks = quickPicks.filterNot { it.id in played }
+        val seeds = recent.asSequence()
+            .filter { it.artist.isNotBlank() }
+            .distinctBy { it.artist.trim().lowercase(Locale.ROOT) }
+            .take(3)
+            .toList()
+        quickPicksJob = viewModelScope.launch {
+            val groups = seeds.map { seed ->
+                async(Dispatchers.IO) {
+                    val artist = seed.artist.trim()
+                    runCatching { YouTube.Search(artist, YouTube.FILTER_SONGS).loadNext() }
+                        .getOrDefault(emptyList())
+                        .filterIsInstance<BrowseItem.SongItem>()
+                        .map { it.song }
+                        .filter { song ->
+                            song.id !in played && (song.artist.equals(artist, ignoreCase = true) ||
+                                song.artist.startsWith("$artist and ", ignoreCase = true) ||
+                                (seed.artistUrl != null && song.artistUrl == seed.artistUrl))
+                        }
+                }
+            }.awaitAll()
+            // Take results by rank across artists before moving deeper into any one catalog.
+            quickPicks = buildList {
+                repeat(groups.maxOfOrNull { it.size } ?: 0) { rank ->
+                    groups.mapNotNullTo(this) { it.getOrNull(rank) }
+                }
+            }.distinctBy { it.id }.take(10)
         }
     }
 }
 
-private val moods = listOf(
-    "Chill" to Aurora.Cyan,
-    "Romance" to Aurora.Pink,
-    "Workout" to Aurora.Amber,
-    "Bollywood" to Color(0xFFFF7A3D),
-    "Lo-fi" to Aurora.Lilac,
-    "Party" to Color(0xFF9CFF57),
-)
+private fun List<Song>.rankMusic() = distinctBy { it.id }.sortedByDescending { it.preferredMusicSource }
+
+private val feedJson = Json { ignoreUnknownKeys = true }
+private val songList = ListSerializer(Song.serializer())
+private val feedMaxAge = TimeUnit.MINUTES.toMillis(30)
 
 /** A tile in the top shortcuts grid. */
 private class Shortcut(val title: String, val art: @Composable () -> Unit, val open: () -> Unit)
@@ -101,97 +163,64 @@ fun HomeScreen(vm: HomeViewModel) {
     val nav = LocalNav.current
     val data by TuneHubApp.library.data.collectAsStateWithLifecycle()
     val recent = data.recent
+    val quickPicks = vm.quickPicks
+    val trending = vm.trending
 
-    LaunchedEffect(recent.firstOrNull()?.id) { recent.firstOrNull()?.let(vm::loadFor) }
+    LaunchedEffect(recent) { vm.loadFor(recent) }
 
     val shortcuts = buildList {
         add(Shortcut("Liked Songs", { LikedCover(58.dp, corner = 16.dp) }) { nav.open(Route.Liked) })
-        data.playlists.take(3).forEach { p ->
+        add(Shortcut("Recently played", { RecentCover(58.dp, corner = 16.dp) }) { nav.open(Route.Recent) })
+        data.playlists.homePlaylists().forEach { p ->
             add(Shortcut(p.name, { PlaylistCover(p.songs, 58.dp, corner = 16.dp) }) { nav.open(Route.LocalPlaylist(p.id)) })
         }
-        data.albums.take(2).forEach { a ->
-            add(Shortcut(a.title, { Artwork(a.thumb, 58.dp, corner = 16.dp) }) { nav.open(Route.Album(a)) })
-        }
-        data.artists.take(2).forEach { a ->
-            add(Shortcut(a.name, { Artwork(a.thumb, 58.dp, corner = 29.dp) }) { nav.open(Route.Artist(a)) })
-        }
-        if (data.downloads.isNotEmpty()) add(Shortcut("Downloads", { DownloadsCover(58.dp, corner = 16.dp) }) { nav.open(Route.Downloads) })
-    }.take(6)
+    }
 
     // one radio per artist you actually listen to, each shown with that artist's song cover
     val mixes = (recent + data.liked).distinctBy { it.artist.lowercase() }.take(8)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp)) {
-        item {
-            Row(
-                Modifier.padding(start = 20.dp, top = 14.dp, end = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    GradientText("TuneHub", MaterialTheme.typography.displaySmall)
-                    Text(greeting(), style = MaterialTheme.typography.bodyLarge, color = Aurora.Muted)
-                }
-                GlassIconButton(Icons.Default.Settings, "Settings") { nav.open(Route.Settings) }
-            }
-        }
-
-        item {
+        item(key = "library-heading") {
             Row(
                 Modifier
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .glass(RoundedCornerShape(18.dp))
-                    .clickable { nav.selectTab(1) }
-                    .padding(horizontal = 16.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Search, null, tint = Aurora.Muted)
-                Text(
-                    "Search songs, artists, albums",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Aurora.Muted,
-                    modifier = Modifier.padding(start = 12.dp),
-                )
+                BrowseTitle("TuneHub", Modifier.weight(1f))
+                PanelIconButton(Icons.Default.Settings, "Settings") { nav.open(Route.Settings) }
             }
         }
-
-        if (data.isEmptyLibrary()) item { RestoreCard() }
-
-        val hero = PlayerConnection.current ?: recent.firstOrNull()
-        if (hero != null) item { ContinueCard(hero, recent) }
-
-        item {
-            Row(
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                moods.forEach { (name, color) -> GlassChip(name, dot = color) { nav.open(Route.Genre(name)) } }
-            }
-        }
-
         item {
             Column(
                 Modifier.padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 shortcuts.chunked(2).forEach { pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         pair.forEach { s -> ShortcutTile(s, Modifier.weight(1f)) }
-                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
         }
 
+        val featured = recent.isEmpty() && PlayerConnection.current == null
+        val spotlightQueue = if (featured) trending else recent
+        val hero = PlayerConnection.current ?: spotlightQueue.firstOrNull()
+        if (hero != null) {
+            item(key = "spotlight") {
+                Box(Modifier.animateItem(fadeInSpec = tween(180)).padding(top = 16.dp)) {
+                    SpotlightCard(hero, spotlightQueue, featured)
+                }
+            }
+        }
+
         if (mixes.isNotEmpty()) {
-            item { SectionTitle("Made for you") }
+            item { BrowseSection("Made for you") }
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     items(mixes, key = { "mix-" + it.id }) { seed ->
-                        MixCard("${seed.artist} Radio", "Mix based on ${seed.title}", seed.thumb) {
+                        MixCard("${seed.artist} Radio", seed.thumb) {
                             PlayerConnection.startRadio(seed)
                         }
                     }
@@ -199,52 +228,34 @@ fun HomeScreen(vm: HomeViewModel) {
             }
         }
 
-        if (recent.isEmpty()) {
-            item { EmptyHint("Nothing played yet. Search for a song to get started. No ads, ever.") }
-        } else {
-            item { SectionTitle("Recently played") }
+        if (quickPicks.isNotEmpty()) {
             item {
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    itemsIndexed(recent.take(20), key = { _, s -> s.id }) { i, song ->
-                        SongCard(song) { PlayerConnection.play(recent.take(50), i) }
-                    }
+                QuickPicksRail(quickPicks) { index ->
+                    PlayerConnection.startRadio(quickPicks[index])
                 }
             }
         }
 
-        if (vm.quickPicks.isNotEmpty()) {
-            item { SectionTitle("Quick picks") }
-            items(vm.quickPicks, key = { "qp-" + it.id }) { song ->
-                SongRow(song, onClick = { PlayerConnection.startRadio(song) })
+        if (trending.isNotEmpty()) {
+            item {
+                TrendingRail(trending)
             }
         }
 
         if (data.artists.isNotEmpty()) {
-            item { SectionTitle("Your artists") }
+            item { BrowseSection("Your artists") }
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(data.artists, key = { it.url }) { a -> ArtistCircle(a, 112.dp) { nav.open(Route.Artist(a)) } }
                 }
             }
         }
-
-        if (vm.trending.isNotEmpty()) {
-            item { SectionTitle("Trending now") }
-            item {
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    itemsIndexed(vm.trending, key = { _, s -> "tr-" + s.id }) { i, song ->
-                        SongCard(song) { PlayerConnection.play(vm.trending, i) }
-                    }
-                }
-            }
-        }
-        item { CreditFooter() }
     }
 }
 
-/** The big glass card at the top: what's playing, or what you played last. */
+/** The first card shows a real track from playback, history or the trending feed. */
 @Composable
-private fun ContinueCard(song: Song, recent: List<Song>) {
+private fun SpotlightCard(song: Song, queue: List<Song>, featured: Boolean) {
     val isCurrent = PlayerConnection.current?.id == song.id
     var position by remember { mutableLongStateOf(0L) }
     LaunchedEffect(isCurrent) {
@@ -255,55 +266,56 @@ private fun ContinueCard(song: Song, recent: List<Song>) {
     }
     val duration = PlayerConnection.durationMs
     val progress = if (isCurrent && duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-    val glow = rememberArtColor(song.thumb)
-
     Column(
         Modifier
             .padding(horizontal = 20.dp)
             .fillMaxWidth()
-            .glass(RoundedCornerShape(30.dp), fill = Aurora.GlassStrong)
-            .background(Brush.horizontalGradient(listOf(glow.copy(alpha = 0.22f), Color.Transparent)))
+            .panel(RoundedCornerShape(16.dp), fill = tuneColors.surface)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            if (isCurrent) "NOW PLAYING" else "CONTINUE LISTENING",
+            when {
+                isCurrent -> "NOW PLAYING"
+                featured -> "FROM TRENDING"
+                else -> "CONTINUE LISTENING"
+            },
             style = MaterialTheme.typography.labelSmall,
-            color = Aurora.Lilac,
+            color = tuneColors.accentText,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Artwork(song.thumb, 88.dp, corner = 22.dp)
+            Artwork(song.thumb, 84.dp, corner = 10.dp)
             Column(
                 Modifier
                     .weight(1f)
                     .padding(horizontal = 14.dp),
             ) {
-                Text(song.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = Aurora.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = tuneColors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Box(
                     Modifier
                         .padding(top = 10.dp)
                         .fillMaxWidth()
                         .height(5.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(Color.White.copy(alpha = 0.14f)),
+                        .background(tuneColors.rule),
                 ) {
                     Box(
                         Modifier
                             .fillMaxWidth(progress)
                             .height(5.dp)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(Aurora.accent),
+                            .background(tuneColors.accent),
                     )
                 }
             }
-            GradientCircleButton(
-                if (isCurrent && PlayerConnection.isPlaying) AppIcons.Pause else Icons.Default.PlayArrow,
+            AccentCircleButton(
+                if (isCurrent && PlayerConnection.isPlaying) AppIcons.Pause else AppIcons.Play,
                 if (isCurrent && PlayerConnection.isPlaying) "Pause" else "Play",
                 size = 56.dp,
             ) {
                 if (isCurrent) PlayerConnection.togglePlay()
-                else PlayerConnection.play(recent.take(50), recent.indexOfFirst { it.id == song.id }.coerceAtLeast(0))
+                else PlayerConnection.play(queue.take(50), queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0))
             }
         }
     }
@@ -314,7 +326,7 @@ private fun ShortcutTile(s: Shortcut, modifier: Modifier) {
     Row(
         modifier
             .height(70.dp)
-            .glass(RoundedCornerShape(20.dp))
+            .panel(RoundedCornerShape(20.dp))
             .clickable(onClick = s.open)
             .padding(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -332,49 +344,32 @@ private fun ShortcutTile(s: Shortcut, modifier: Modifier) {
 
 /** A radio mix: the seed song's cover with the mix name over a dark fade. */
 @Composable
-private fun MixCard(title: String, subtitle: String, thumb: String?, onClick: () -> Unit) {
-    Column(
-        Modifier
-            .width(156.dp)
-            .clickable(onClick = onClick),
+private fun MixCard(title: String, thumb: String?, onClick: () -> Unit) {
+    Box(
+        Modifier.width(204.dp).height(132.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onClick),
     ) {
-        Box(Modifier.size(156.dp)) {
-            Artwork(thumb, 156.dp, corner = 28.dp)
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Aurora.Ink.copy(alpha = 0.85f)))),
-            )
-            Row(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(10.dp)
-                    .glass(RoundedCornerShape(50), fill = Aurora.Ink.copy(alpha = 0.45f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(AppIcons.Radio, null, tint = Aurora.Cyan, modifier = Modifier.size(14.dp))
-                Text("RADIO", style = MaterialTheme.typography.labelSmall, color = Aurora.Text, modifier = Modifier.padding(start = 4.dp))
-            }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp),
-            )
+        Artwork(thumb, 204.dp, Modifier.matchParentSize(), corner = 12.dp)
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, TuneHubInk.copy(alpha = 0.95f)))))
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(AppIcons.Radio, null, tint = TuneHubAmber, modifier = Modifier.size(16.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = TuneHubLightText, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Text(
-            subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = Aurora.Muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+    }
+}
+
+@Composable
+private fun QuickPicksRail(songs: List<Song>, onPlay: (Int) -> Unit) {
+    BrowseSection("Quick picks")
+    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
+            SongCard(song) { onPlay(index) }
+        }
     }
 }
 
@@ -384,50 +379,46 @@ private fun SongCard(song: Song, onClick: () -> Unit) {
         Modifier
             .width(144.dp)
             .prefetchOnTouch(song.id)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Artwork(song.thumb, 144.dp, corner = 26.dp)
+        Artwork(song.thumb, 144.dp, corner = 10.dp)
         Text(
             song.title,
             style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
+            minLines = 2,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
         )
-        Text(song.artist, style = MaterialTheme.typography.bodySmall, color = Aurora.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(song.artist, style = MaterialTheme.typography.bodySmall, color = tuneColors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-    in 5..11 -> "Good morning"
-    in 12..16 -> "Good afternoon"
-    else -> "Good evening"
-}
-
-/** Shown while the library is empty, e.g. right after a reinstall: bring everything back. */
 @Composable
-private fun RestoreCard() {
-    val nav = LocalNav.current
-    val restore = rememberRestoreAction()
-    Column(
-        Modifier
-            .padding(horizontal = 20.dp, vertical = 4.dp)
-            .fillMaxWidth()
-            .glass(RoundedCornerShape(28.dp), fill = Aurora.GlassStrong)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text("Reinstalled TuneHub?", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Restore your playlists and likes from your backup in Download/TuneHub, or import a playlist from Spotify.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Aurora.Muted,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GlassChip("Restore backup", selected = true, onClick = restore)
-            GlassChip("Import playlist") { nav.open(Route.Import) }
+private fun TrendingRail(songs: List<Song>) {
+    BrowseSection("Trending now")
+    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        itemsIndexed(songs.chunked(3), key = { _, group -> group.first().id }) { page, group ->
+            Column(Modifier.width(280.dp).panel(RoundedCornerShape(12.dp))) {
+                group.forEachIndexed { offset, song ->
+                    val index = page * 3 + offset
+                    if (offset > 0) HorizontalDivider(Modifier.padding(start = 64.dp, end = 12.dp), color = tuneColors.rule)
+                    Row(
+                        Modifier.fillMaxWidth().prefetchOnTouch(song.id)
+                            .clickable(role = Role.Button) { PlayerConnection.play(songs, index) }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Artwork(song.thumb, 44.dp, corner = 7.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text(song.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(song.artist, style = MaterialTheme.typography.bodySmall, color = tuneColors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(AppIcons.Play, null, tint = tuneColors.muted, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
         }
     }
 }

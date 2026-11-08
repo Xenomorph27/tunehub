@@ -17,6 +17,7 @@ import com.tunehub.app.TuneHubApp
 import com.tunehub.app.data.Song
 import com.tunehub.app.data.StreamResolver
 import com.tunehub.app.playback.PlaybackService
+import com.tunehub.app.playback.PlaylistStart
 import com.tunehub.app.playback.toMediaItem
 import com.tunehub.app.playback.toSong
 
@@ -135,9 +136,10 @@ object PlayerConnection {
         ensureConnected()
     }
 
-    fun play(songs: List<Song>, startIndex: Int = 0, shuffled: Boolean = false, radio: Boolean = false) {
+    fun play(songs: List<Song>, startIndex: Int = 0, shuffled: Boolean = false, radio: Boolean = false, playlistId: String? = null) {
         if (songs.isEmpty()) return
-        val items = songs.mapIndexed { i, song -> song.toMediaItem(radio = radio && i == 0) }
+        val start = playlistId?.let { PlaylistStart(it, java.util.UUID.randomUUID().toString()) }
+        val items = songs.mapIndexed { i, song -> song.toMediaItem(radio = radio && i == 0, playlistStart = start) }
         withController(replaces = true) { c ->
             c.shuffleModeEnabled = shuffled
             c.setMediaItems(items, startIndex, 0)

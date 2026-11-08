@@ -233,6 +233,7 @@ object YouTube {
             durationSec = duration,
             thumb = bestThumb(thumbnails, id),
             artistUrl = uploaderUrl,
+            preferredMusicSource = isUploaderVerified || uploaderName.orEmpty().endsWith(" - Topic"),
         )
     }
 

@@ -8,20 +8,26 @@ plugins {
 }
 
 // CI passes the build number so every build installs as an update over the previous one
-val buildNumber = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 1
+val buildNumber = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 2
+// The local redesign includes upstream build 51. Its independent APK version code starts at 2.
+val upstreamBuildNumber = System.getenv("TUNEHUB_UPSTREAM_BUILD")?.toIntOrNull() ?: 51
 val keystorePath: String? = System.getenv("TUNEHUB_KEYSTORE")
+val releaseUrl = System.getenv("TUNEHUB_RELEASES_URL")
+    ?: System.getenv("GITHUB_REPOSITORY")?.let { "https://github.com/$it/releases/latest" }
+    ?: ""
 
 android {
     namespace = "com.tunehub.app"
     compileSdk = 35
 
     defaultConfig {
-        // unchanged from the app's first name so existing installs update in place and keep their library
-        applicationId = "com.spitify.app"
+        applicationId = System.getenv("TUNEHUB_APPLICATION_ID")?.takeIf { it.isNotBlank() } ?: "com.tunehub.app"
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        versionName = "1.1"
+        buildConfigField("int", "UPSTREAM_BUILD_NUMBER", upstreamBuildNumber.toString())
+        buildConfigField("String", "RELEASES_URL", "\"${releaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     signingConfigs {
@@ -61,6 +67,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 

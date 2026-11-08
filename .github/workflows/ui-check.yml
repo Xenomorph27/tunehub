@@ -4,6 +4,9 @@ name: UI check (emulator)
 on:
   workflow_dispatch:
 
+env:
+  TUNEHUB_APPLICATION_ID: ${{ github.repository == 'Xenomorph27/tunehub' && 'com.spitify.app' || vars.TUNEHUB_APPLICATION_ID || 'com.tunehub.app' }}
+
 jobs:
   ui:
     runs-on: ubuntu-latest

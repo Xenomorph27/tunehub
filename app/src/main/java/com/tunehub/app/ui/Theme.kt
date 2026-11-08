@@ -1,18 +1,20 @@
-@file:OptIn(ExperimentalTextApi::class)
-
 package com.tunehub.app.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
-import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
@@ -21,87 +23,138 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tunehub.app.R
 
-/** The Aurora Glass palette: deep space ink, glowing violet / cyan / pink, frosted glass. */
-object Aurora {
-    val Ink = Color(0xFF08081A)
-    val Violet = Color(0xFF7B4DFF)
-    val VioletSoft = Color(0xFF8F6BFF)
-    val Cyan = Color(0xFF6FF3FF)
-    val Pink = Color(0xFFFF3FB4)
-    val Amber = Color(0xFFFFB547)
-    val Text = Color(0xFFF4F3FF)
-    val Muted = Color(0xFFC9C6E8)
-    val Lilac = Color(0xFFB9B2FF)
-    val Glass = Color.White.copy(alpha = 0.08f)
-    val GlassStrong = Color.White.copy(alpha = 0.13f)
-    val Stroke = Color.White.copy(alpha = 0.16f)
-    val Sheet = Color(0xFF15122E)
+internal val TuneHubInk = Color(0xFF1F1E1D)
+internal val TuneHubLightText = Color(0xFFFAF9F5)
+internal val TuneHubAmber = Color(0xFFF0B35A)
+private val Terracotta = Color(0xFFD97757)
 
-    val accent = Brush.linearGradient(listOf(VioletSoft, Cyan))
-    val warm = Brush.linearGradient(listOf(Color(0xFFFF9A3C), Pink, Violet))
+@Immutable
+internal data class TuneHubColors(
+    val background: Color,
+    val surface: Color,
+    val raised: Color,
+    val pressed: Color,
+    val text: Color,
+    val muted: Color,
+    val accentText: Color,
+    val danger: Color,
+    val rule: Color,
+    val track: Color,
+) {
+    val accent = Terracotta
+    val onAccent = TuneHubInk
 }
 
-val Ink = Aurora.Ink
-
-private fun variable(res: Int, weight: Int) =
-    Font(res, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
-
-val Outfit = FontFamily(
-    variable(R.font.outfit, 400),
-    variable(R.font.outfit, 500),
-    variable(R.font.outfit, 600),
-    variable(R.font.outfit, 700),
-    variable(R.font.outfit, 800),
+private val Paper = TuneHubColors(
+    background = Color(0xFFFAF9F5),
+    surface = Color(0xFFF0EEE6),
+    raised = Color(0xFFE8E6DC),
+    pressed = Color(0xFFDEDBCE),
+    text = Color(0xFF141413),
+    muted = Color(0xFF66655F),
+    accentText = Color(0xFFA34A2C),
+    danger = Color(0xFFB53333),
+    rule = TuneHubInk.copy(alpha = 0.12f),
+    track = Color(0xFF858174),
 )
 
-val SpaceGrotesk = FontFamily(
-    variable(R.font.space_grotesk, 500),
-    variable(R.font.space_grotesk, 700),
+private val Charcoal = TuneHubColors(
+    background = Color(0xFF262624),
+    surface = Color(0xFF30302E),
+    raised = Color(0xFF3A3A37),
+    pressed = Color(0xFF454540),
+    text = TuneHubLightText,
+    muted = Color(0xFFA8A69E),
+    accentText = Color(0xFFE89A7C),
+    danger = Color(0xFFE08B8B),
+    rule = Color(0xFFFAF9F5).copy(alpha = 0.11f),
+    track = Color(0xFF89867C),
 )
 
-private val colors = darkColorScheme(
-    primary = Aurora.Cyan,
-    onPrimary = Aurora.Ink,
-    secondary = Aurora.Violet,
-    onSecondary = Aurora.Text,
-    tertiary = Aurora.Pink,
-    background = Aurora.Ink,
-    onBackground = Aurora.Text,
-    surface = Aurora.Ink,
-    onSurface = Aurora.Text,
-    surfaceVariant = Color(0xFF1E1A40),
-    onSurfaceVariant = Aurora.Muted,
-    surfaceContainerLowest = Aurora.Ink,
-    surfaceContainerLow = Color(0xFF110E28),
-    surfaceContainer = Aurora.Sheet,
-    surfaceContainerHigh = Color(0xFF1E1A40),
-    surfaceContainerHighest = Color(0xFF282352),
-    outline = Color(0xFF3B3566),
-    outlineVariant = Color(0xFF2A2550),
+private val LocalTuneHubColors = staticCompositionLocalOf { Paper }
+internal val tuneColors: TuneHubColors
+    @Composable get() = LocalTuneHubColors.current
+
+private fun TuneHubColors.colorScheme(dark: Boolean) =
+    (if (dark) darkColorScheme() else lightColorScheme()).copy(
+        primary = accentText,
+        onPrimary = if (dark) TuneHubInk else Color.White,
+        primaryContainer = raised,
+        onPrimaryContainer = text,
+        inversePrimary = if (dark) Paper.accentText else Charcoal.accentText,
+        secondary = accentText,
+        onSecondary = if (dark) TuneHubInk else Color.White,
+        secondaryContainer = raised,
+        onSecondaryContainer = text,
+        tertiary = accentText,
+        onTertiary = if (dark) TuneHubInk else Color.White,
+        tertiaryContainer = raised,
+        onTertiaryContainer = text,
+        background = background,
+        onBackground = text,
+        surface = surface,
+        surfaceTint = accent,
+        onSurface = text,
+        inverseSurface = if (dark) Paper.background else Charcoal.background,
+        inverseOnSurface = if (dark) Paper.text else Charcoal.text,
+        surfaceVariant = raised,
+        onSurfaceVariant = muted,
+        surfaceContainerLowest = background,
+        surfaceContainerLow = background,
+        surfaceContainer = surface,
+        surfaceContainerHigh = raised,
+        surfaceContainerHighest = pressed,
+        outline = track,
+        outlineVariant = rule,
+        error = danger,
+    )
+
+private val LightScheme = Paper.colorScheme(dark = false)
+private val DarkScheme = Charcoal.colorScheme(dark = true)
+
+@OptIn(ExperimentalTextApi::class)
+private fun variableFont(resource: Int, weight: FontWeight) =
+    Font(resource, weight, variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)))
+
+internal val EditorialSerif = FontFamily(
+    variableFont(R.font.source_serif_4, FontWeight.Normal),
+    variableFont(R.font.source_serif_4, FontWeight.Bold),
 )
+
+private val Inter = FontFamily(
+    variableFont(R.font.inter, FontWeight.Normal),
+    variableFont(R.font.inter, FontWeight.Medium),
+    variableFont(R.font.inter, FontWeight.SemiBold),
+)
+
+private val Silkscreen = FontFamily(Font(R.font.silkscreen))
 
 private val type = Typography(
-    displaySmall = TextStyle(fontFamily = SpaceGrotesk, fontSize = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),
-    headlineMedium = TextStyle(fontFamily = SpaceGrotesk, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
-    headlineSmall = TextStyle(fontFamily = SpaceGrotesk, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
-    titleLarge = TextStyle(fontFamily = Outfit, fontSize = 21.sp, fontWeight = FontWeight.Bold),
-    titleMedium = TextStyle(fontFamily = Outfit, fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall = TextStyle(fontFamily = Outfit, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontFamily = Outfit, fontSize = 16.sp),
-    bodyMedium = TextStyle(fontFamily = Outfit, fontSize = 14.sp),
-    bodySmall = TextStyle(fontFamily = Outfit, fontSize = 12.5.sp),
-    labelLarge = TextStyle(fontFamily = Outfit, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-    labelMedium = TextStyle(fontFamily = Outfit, fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-    labelSmall = TextStyle(fontFamily = Outfit, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.4.sp),
+    displaySmall = TextStyle(fontFamily = EditorialSerif, fontSize = 42.sp, lineHeight = 46.sp, letterSpacing = (-1).sp),
+    headlineMedium = TextStyle(fontFamily = EditorialSerif, fontSize = 32.sp, lineHeight = 37.sp, letterSpacing = (-0.6).sp),
+    headlineSmall = TextStyle(fontFamily = EditorialSerif, fontSize = 25.sp, lineHeight = 30.sp),
+    titleLarge = TextStyle(fontFamily = Inter, fontSize = 19.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontFamily = Inter, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontFamily = Inter, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontFamily = Inter, fontSize = 16.sp, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontFamily = Inter, fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontFamily = Inter, fontSize = 12.sp, lineHeight = 17.sp),
+    labelLarge = TextStyle(fontFamily = Inter, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontFamily = Inter, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontFamily = Silkscreen, fontSize = 11.sp, lineHeight = 16.sp, letterSpacing = 0.6.sp),
 )
 
 @Composable
 fun TuneHubTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = colors, typography = type, content = content)
+    val dark = isSystemInDarkTheme()
+    CompositionLocalProvider(LocalTuneHubColors provides if (dark) Charcoal else Paper) {
+        MaterialTheme(colorScheme = if (dark) DarkScheme else LightScheme, typography = type, content = content)
+    }
 }
 
 /** Material icons not in material-icons-core (the extended set adds ~10 MB to the APK). */
 object AppIcons {
+    val Play = icon("M8 5v14l11-7z")
     val Pause = icon("M6 19h4V5H6v14zm8-14v14h4V5h-4z")
     val SkipNext = icon("M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z")
     val SkipPrevious = icon("M6 6h2v12H6zm3.5 6l8.5 6V6z")
