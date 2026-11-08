@@ -79,7 +79,6 @@ enum class SearchFilter(val label: String, val ytFilter: String?) {
     Videos("Videos", YouTube.FILTER_VIDEOS),
 }
 
-/** Search state; also used (with a fixed query) by genre pages. */
 class SearchViewModel : ViewModel() {
     var query by mutableStateOf("")
         private set
@@ -167,7 +166,6 @@ class SearchViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // keep what we have; scrolling again retries
             } finally {
                 if (isActive) loading = false
             }
@@ -193,23 +191,15 @@ fun itemKey(item: BrowseItem): String = when (item) {
     is BrowseItem.AlbumItem -> "l-" + item.album.url
 }
 
-// Muted print accents keep the genre grid legible in both themes.
 private val genres = listOf(
-    "Bollywood" to 0xFFC57A55, "Punjabi" to 0xFFB18A4E,
-    "Lo-fi" to 0xFF6C938F, "Pop" to 0xFFAD718F,
-    "Hip-Hop" to 0xFFB77858, "Chill" to 0xFF698FA5,
-    "Workout" to 0xFF7D985D, "Romance" to 0xFFB37478,
-    "Party" to 0xFF977EA8, "Rock" to 0xFFB46455,
-    "Indie" to 0xFF84936B, "K-Pop" to 0xFFAC7796,
-    "Focus" to 0xFF827E9D, "Sad songs" to 0xFF7488A6,
-    "EDM" to 0xFF63958F, "Retro" to 0xFFB08B54,
+    "Bollywood", "Punjabi", "Lo-fi", "Pop", "Hip-Hop", "Chill", "Workout", "Romance",
+    "Party", "Rock", "Indie", "K-Pop", "Focus", "Sad songs", "EDM", "Retro",
 )
 
 @Composable
 fun SearchScreen(vm: SearchViewModel) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    // hide the keyboard so results aren't half covered
     val dismissKeyboard = { keyboard?.hide(); focusManager.clearFocus() }
     val nav = LocalNav.current
 
@@ -296,7 +286,6 @@ private fun Suggestions(suggestions: List<String>, onPick: (String) -> Unit) {
     }
 }
 
-/** What the Search tab shows before you type: recent searches and genre tiles. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SearchHome(onSearch: (String) -> Unit, onGenre: (String) -> Unit) {
@@ -313,7 +302,7 @@ private fun SearchHome(onSearch: (String) -> Unit, onGenre: (String) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                genres.forEach { (name, color) -> BrowseChip(name, marker = Color(color)) { onGenre(name) } }
+                genres.forEach { name -> BrowseChip(name) { onGenre(name) } }
             }
         }
         if (data.searches.isNotEmpty()) {
@@ -376,7 +365,6 @@ private fun SearchResults(vm: SearchViewModel) {
 fun BrowseItemRow(item: BrowseItem) {
     val nav = LocalNav.current
     when (item) {
-        // a single tap plays the song and lets autoplay build a radio around it
         is BrowseItem.SongItem -> SongRow(item.song, onClick = { PlayerConnection.startRadio(item.song) })
         is BrowseItem.ArtistItem -> BrowseRow(
             title = item.artist.name,
@@ -396,10 +384,8 @@ fun BrowseItemRow(item: BrowseItem) {
     }
 }
 
-/** The "All" tab: a top result, then a few of each kind. */
 fun LazyListScope.topResults(top: YouTube.TopResults, query: String, onMore: ((SearchFilter) -> Unit)?) {
     val seeAll = if (onMore != null) "See all" else null
-    // the best artist match wins top result if its name matches the query; otherwise the first song
     val topArtist = top.artists.firstOrNull()?.takeIf { it.name.equals(query.trim(), ignoreCase = true) }
     val topSong = top.songs.firstOrNull()
 
@@ -476,7 +462,6 @@ private fun TopResultCard(artist: ArtistRef?, song: Song?) {
     }
 }
 
-/** A genre tile's page: the "All" search for that genre. */
 @Composable
 fun GenreScreen(name: String, onBack: () -> Unit) {
     val vm: SearchViewModel = viewModel(key = "genre-$name")

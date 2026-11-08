@@ -10,7 +10,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Use the Central mirror for the compiler whose download times out on CI's primary route.
         exclusiveContent {
             forRepository {
                 maven("https://maven-central.storage-download.googleapis.com/maven2")
@@ -19,7 +18,6 @@ dependencyResolutionManagement {
                 includeVersion("org.jetbrains.kotlin", "kotlin-compiler-embeddable", "2.1.0")
             }
         }
-        // NewPipeExtractor is published through JitPack
         maven("https://jitpack.io")
     }
 }
