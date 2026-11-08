@@ -11,16 +11,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertTrue
+import org.junit.AssumptionViolatedException
 import org.junit.BeforeClass
 import org.junit.Test
 import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException
 import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
 
-/**
- * Live smoke tests against YouTube Music and LRCLIB. YouTube blocks stream access from
- * datacenter IPs, so CI treats failures here as warnings; read the output.
- */
 class ExtractionTest {
 
     @Test
@@ -66,7 +64,13 @@ class ExtractionTest {
             .filterIsInstance<BrowseItem.SongItem>().map { it.song }
         assertTrue("search returned nothing", songs.isNotEmpty())
 
-        val stream = StreamResolver.resolve(songs.first().id)
+        val stream = try {
+            StreamResolver.resolve(songs.first().id)
+        } catch (blocked: SignInConfirmNotBotException) {
+            val reason = "YouTube requires bot verification for this connection"
+            println("Skipping stream fetch because $reason")
+            throw AssumptionViolatedException(reason, blocked)
+        }
         println("stream host: ${stream.url.substringAfter("://").substringBefore("/")}, quality: ${stream.quality}")
         val request = Request.Builder()
             .url(stream.url + "&rn=1")
