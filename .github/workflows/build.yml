@@ -17,7 +17,7 @@ env:
   # SHA-256 of the certificate every published TuneHub APK is signed with. A build signed with
   # anything else could not update existing installs, so it must never be published.
   RELEASE_CERT_SHA256: ${{ vars.RELEASE_CERT_SHA256 }}
-  TUNEHUB_APPLICATION_ID: ${{ vars.TUNEHUB_APPLICATION_ID }}
+  TUNEHUB_APPLICATION_ID: ${{ vars.TUNEHUB_APPLICATION_ID || 'com.tunehub.app' }}
 
 jobs:
   build:
@@ -50,7 +50,8 @@ jobs:
           fi
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Restore signing key
+      - name: Configure APK signing
+        id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -63,6 +64,11 @@ jobs:
           elif [[ ! "$TUNEHUB_APPLICATION_ID" =~ ^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$ ]] || [ "$TUNEHUB_APPLICATION_ID" = "com.spitify.app" ]; then
             echo "::error::Set TUNEHUB_APPLICATION_ID to a unique package name for this fork"
             exit 1
+          elif [ -z "$RELEASE_CERT_SHA256$KEYSTORE_BASE64$KEYSTORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
+            echo "TUNEHUB_APPLICATION_ID=${TUNEHUB_APPLICATION_ID}.test" >> "$GITHUB_ENV"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Signing is unconfigured. A debug-signed test APK will be uploaded as an artifact."
+            exit 0
           fi
           if [[ ! "$RELEASE_CERT_SHA256" =~ ^[[:xdigit:]]{64}$ ]]; then
             echo "::error::Set RELEASE_CERT_SHA256 to the signing certificate SHA-256 digest without colons"
@@ -75,6 +81,7 @@ jobs:
           done
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tunehub.jks"
           echo "TUNEHUB_KEYSTORE=$RUNNER_TEMP/tunehub.jks" >> "$GITHUB_ENV"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
 
       - name: Build release APK
         env:
@@ -84,6 +91,7 @@ jobs:
         run: gradle assembleRelease --stacktrace
 
       - name: Verify the APK is signed with the release certificate
+        if: steps.signing.outputs.publish == 'true'
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           CERT=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk \
@@ -105,13 +113,13 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: tunehub-apk
+          name: ${{ steps.signing.outputs.publish == 'true' && 'tunehub-apk' || 'tunehub-test-apk' }}
           path: app/build/outputs/apk/release/*.apk
 
       # One release per build, never deleted, so GitHub's download counts add up across builds.
       # Only from main; a re-run of an already published build stops here instead of failing later.
       - name: Publish release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.signing.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
